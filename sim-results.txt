@@ -1,0 +1,104 @@
+
+=== SINGLE (1000 rounds, scores in mm) ===
+ALL                    n=1000 fall= 18.0% touch=  0.0% cash= 74.6% zero= 18.7% mean= 35.0 p50= 32 p90= 69 max= 98 coins= 18.0 fee=0.18
+-- by archetype
+snail                  n= 100 fall=  1.0% touch=  0.0% cash= 79.0% zero=  1.0% mean= 26.4 p50= 25 p90= 32 max= 37 coins= 28.2 fee=0.01
+steady                 n= 100 fall= 14.0% touch=  0.0% cash= 66.0% zero= 14.0% mean= 26.5 p50= 30 p90= 34 max= 43 coins= 31.1 fee=0.14
+harmonic-short         n= 100 fall=  2.0% touch=  0.0% cash= 98.0% zero=  2.0% mean= 45.4 p50= 49 p90= 52 max= 58 coins=  8.0 fee=0.02
+harmonic-long          n= 100 fall=  9.0% touch=  0.0% cash= 91.0% zero=  9.0% mean= 59.7 p50= 63 p90= 93 max= 93 coins= 17.9 fee=0.09
+pillar                 n= 100 fall=  5.0% touch=  0.0% cash= 95.0% zero=  5.0% mean= 53.9 p50= 57 p90= 70 max= 74 coins= 16.0 fee=0.05
+gambler                n= 100 fall= 66.0% touch=  0.0% cash=  0.0% zero= 66.0% mean= 11.3 p50=  0 p90= 35 max= 44 coins= 44.1 fee=0.71
+zigzag                 n= 100 fall=  1.0% touch=  0.0% cash= 99.0% zero=  1.0% mean= 32.2 p50= 32 p90= 36 max= 45 coins= 14.0 fee=0.01
+drunk                  n= 100 fall= 80.0% touch=  0.0% cash= 20.0% zero= 87.0% mean=  3.8 p50=  0 p90= 26 max= 43 coins=  3.1 fee=0.80
+quitter                n= 100 fall=  1.0% touch=  0.0% cash= 99.0% zero=  1.0% mean= 29.4 p50= 30 p90= 35 max= 45 coins=  4.0 fee=0.01
+quality-reader         n= 100 fall=  1.0% touch=  0.0% cash= 99.0% zero=  1.0% mean= 61.0 p50= 55 p90= 98 max= 98 coins= 14.2 fee=0.01
+-- by 24h volume (quality)
+$0 q=0.00              n= 200 fall= 28.0% touch=  0.0% cash= 72.0% zero= 28.0% mean= 26.8 p50= 32 p90= 49 max= 73 coins=  8.1 fee=0.28
+$500 q=0.00            n= 200 fall= 23.0% touch=  0.0% cash= 77.0% zero= 23.5% mean= 27.2 p50= 32 p90= 47 max= 60 coins=  8.3 fee=0.23
+$5000 q=0.43           n= 200 fall= 19.0% touch=  0.0% cash= 79.5% zero= 19.0% mean= 34.5 p50= 33 p90= 62 max= 76 coins= 11.4 fee=0.21
+$30000 q=0.77          n= 200 fall= 12.5% touch=  0.0% cash= 82.0% zero= 13.5% mean= 40.6 p50= 33 p90= 76 max= 89 coins= 17.9 fee=0.13
+$100000 q=1.00         n= 200 fall=  7.5% touch=  0.0% cash= 62.5% zero=  9.5% mean= 45.7 p50= 31 p90= 98 max= 98 coins= 44.6 fee=0.07
+-- expected vault net per round (all 1000 rounds, all volumes; wallet ante = its best score)
+first play wallet (ante 0) ante in=  0.00 payout out= 34.96 fee vault->treasury=0.00 wallet net= 34.96 VAULT NET=-34.96 (tokens per round, + means vault gains)
+mid wallet (ante 10)       ante in= 10.00 payout out= 34.96 fee vault->treasury=0.18 wallet net= 24.96 VAULT NET=-25.15 (tokens per round, + means vault gains)
+mid wallet (ante 30)       ante in= 30.00 payout out= 34.96 fee vault->treasury=0.18 wallet net=  4.96 VAULT NET= -5.15 (tokens per round, + means vault gains)
+mid wallet (ante 100)      ante in=100.00 payout out= 34.96 fee vault->treasury=0.18 wallet net=-65.04 VAULT NET= 64.85 (tokens per round, + means vault gains)
+-- same at today's CAPH volume ($0 to $500, q=0), 400 rounds
+first play wallet (ante 0) ante in=  0.00 payout out= 27.03 fee vault->treasury=0.00 wallet net= 27.03 VAULT NET=-27.03 (tokens per round, + means vault gains)
+mid wallet (ante 30)       ante in= 30.00 payout out= 27.03 fee vault->treasury=0.26 wallet net= -2.97 VAULT NET=  2.71 (tokens per round, + means vault gains)
+-- score histogram (bucket start: rounds), width 10
+0:187  10:6  20:152  30:315  40:125  50:64  60:52  70:45  80:14  90:40
+
+=== TWIN (1000 rounds, scores in coins) ===
+ALL                    n=1000 fall= 38.6% touch= 23.9% cash= 37.5% zero= 76.1% mean=  3.4 p50=  0 p90= 16 max= 20 coins= 21.6 fee=0.49
+-- by archetype
+snail                  n= 100 fall= 11.0% touch=  0.0% cash= 89.0% zero=100.0% mean=  0.0 p50=  0 p90=  0 max=  0 coins= 22.5 fee=0.13
+steady                 n= 100 fall= 20.0% touch=  0.0% cash= 80.0% zero=100.0% mean=  0.0 p50=  0 p90=  0 max=  0 coins= 25.1 fee=0.21
+harmonic-short         n= 100 fall= 18.0% touch= 67.0% cash= 15.0% zero= 33.0% mean=  5.5 p50=  8 p90=  9 max=  9 coins= 19.7 fee=0.22
+harmonic-long          n= 100 fall= 34.0% touch= 57.0% cash=  9.0% zero= 43.0% mean=  9.2 p50= 16 p90= 16 max= 18 coins= 37.2 fee=0.82
+pillar                 n= 100 fall= 36.0% touch= 58.0% cash=  6.0% zero= 42.0% mean=  9.2 p50= 16 p90= 16 max= 16 coins= 36.7 fee=0.84
+gambler                n= 100 fall= 75.0% touch=  0.0% cash= 25.0% zero=100.0% mean=  0.0 p50=  0 p90=  0 max=  0 coins= 23.5 fee=0.75
+zigzag                 n= 100 fall=100.0% touch=  0.0% cash=  0.0% zero=100.0% mean=  0.0 p50=  0 p90=  0 max=  0 coins= 10.8 fee=1.00
+drunk                  n= 100 fall= 80.0% touch=  0.0% cash= 20.0% zero=100.0% mean=  0.0 p50=  0 p90=  0 max=  0 coins=  4.2 fee=0.80
+quitter                n= 100 fall=  0.0% touch=  0.0% cash=100.0% zero=100.0% mean=  0.0 p50=  0 p90=  0 max=  0 coins=  5.0 fee=0.00
+quality-reader         n= 100 fall= 12.0% touch= 57.0% cash= 31.0% zero= 43.0% mean=  9.7 p50= 13 p90= 20 max= 20 coins= 31.5 fee=0.17
+-- by 24h volume (quality)
+$0 q=0.00              n= 200 fall= 56.0% touch=  4.5% cash= 39.5% zero= 95.5% mean=  0.6 p50=  0 p90=  0 max= 18 coins= 19.4 fee=0.77
+$500 q=0.00            n= 200 fall= 61.5% touch=  5.0% cash= 33.5% zero= 95.0% mean=  0.5 p50=  0 p90=  0 max= 16 coins= 19.6 fee=0.89
+$5000 q=0.43           n= 200 fall= 32.0% touch= 30.0% cash= 38.0% zero= 70.0% mean=  3.9 p50=  0 p90= 16 max= 17 coins= 20.2 fee=0.38
+$30000 q=0.77          n= 200 fall= 25.0% touch= 40.0% cash= 35.0% zero= 60.0% mean=  5.8 p50=  0 p90= 17 max= 18 coins= 21.4 fee=0.25
+$100000 q=1.00         n= 200 fall= 18.5% touch= 40.0% cash= 41.5% zero= 60.0% mean=  6.0 p50=  0 p90= 20 max= 20 coins= 27.5 fee=0.18
+-- expected vault net per round (all 1000 rounds, all volumes; wallet ante = its best score)
+first play wallet: not allowed (twin and triple are locked until a best score exists)
+mid wallet (ante 10)       ante in= 10.00 payout out=  6.14 fee vault->treasury=0.49 wallet net= -3.86 VAULT NET=  3.37 (tokens per round, + means vault gains)
+mid wallet (ante 30)       ante in= 30.00 payout out= 18.42 fee vault->treasury=0.49 wallet net=-11.58 VAULT NET= 11.09 (tokens per round, + means vault gains)
+mid wallet (ante 100)      ante in=100.00 payout out= 61.40 fee vault->treasury=0.49 wallet net=-38.60 VAULT NET= 38.11 (tokens per round, + means vault gains)
+-- same at today's CAPH volume ($0 to $500, q=0), 400 rounds
+mid wallet (ante 30)       ante in= 30.00 payout out= 12.38 fee vault->treasury=0.83 wallet net=-17.63 VAULT NET= 16.80 (tokens per round, + means vault gains)
+-- score histogram (bucket start: rounds), width 5
+0:761  5:69  10:15  15:135  20:20
+
+=== TRIPLE (1000 rounds, scores in coins) ===
+ALL                    n=1000 fall= 37.3% touch= 19.5% cash= 43.2% zero= 80.5% mean=  2.9 p50=  0 p90= 16 max= 21 coins= 30.9 fee=0.69
+-- by archetype
+snail                  n= 100 fall=  9.0% touch=  0.0% cash= 91.0% zero=100.0% mean=  0.0 p50=  0 p90=  0 max=  0 coins= 22.8 fee=0.09
+steady                 n= 100 fall= 27.0% touch=  0.0% cash= 73.0% zero=100.0% mean=  0.0 p50=  0 p90=  0 max=  0 coins= 23.8 fee=0.29
+harmonic-short         n= 100 fall= 35.0% touch= 53.0% cash= 12.0% zero= 47.0% mean=  4.8 p50=  9 p90=  9 max=  9 coins= 31.1 fee=0.74
+harmonic-long          n= 100 fall= 45.0% touch= 52.0% cash=  3.0% zero= 48.0% mean=  8.8 p50= 16 p90= 17 max= 18 coins= 55.5 fee=1.52
+pillar                 n= 100 fall= 50.0% touch= 48.0% cash=  2.0% zero= 52.0% mean=  7.7 p50=  0 p90= 16 max= 16 coins= 50.7 fee=1.55
+gambler                n= 100 fall= 71.0% touch=  0.0% cash= 29.0% zero=100.0% mean=  0.0 p50=  0 p90=  0 max=  0 coins= 26.8 fee=0.71
+zigzag                 n= 100 fall= 34.0% touch=  0.0% cash= 66.0% zero=100.0% mean=  0.0 p50=  0 p90=  0 max=  0 coins= 36.7 fee=0.64
+drunk                  n= 100 fall= 78.0% touch=  0.0% cash= 22.0% zero=100.0% mean=  0.0 p50=  0 p90=  0 max=  0 coins=  5.5 fee=0.78
+quitter                n= 100 fall=  0.0% touch=  0.0% cash=100.0% zero=100.0% mean=  0.0 p50=  0 p90=  0 max=  0 coins=  6.0 fee=0.00
+quality-reader         n= 100 fall= 24.0% touch= 42.0% cash= 34.0% zero= 58.0% mean=  8.1 p50=  0 p90= 21 max= 21 coins= 50.0 fee=0.61
+-- by 24h volume (quality)
+$0 q=0.00              n= 200 fall= 62.5% touch=  1.0% cash= 36.5% zero= 99.0% mean=  0.1 p50=  0 p90=  0 max=  9 coins= 27.9 fee=1.25
+$500 q=0.00            n= 200 fall= 64.5% touch=  0.0% cash= 35.5% zero=100.0% mean=  0.0 p50=  0 p90=  0 max=  0 coins= 26.3 fee=1.24
+$5000 q=0.43           n= 200 fall= 39.0% touch= 16.5% cash= 44.5% zero= 83.5% mean=  2.3 p50=  0 p90= 15 max= 18 coins= 30.4 fee=0.77
+$30000 q=0.77          n= 200 fall= 13.5% touch= 40.0% cash= 46.5% zero= 60.0% mean=  6.0 p50=  0 p90= 18 max= 19 coins= 32.5 fee=0.14
+$100000 q=1.00         n= 200 fall=  7.0% touch= 40.0% cash= 53.0% zero= 60.0% mean=  6.3 p50=  0 p90= 21 max= 21 coins= 37.4 fee=0.07
+-- expected vault net per round (all 1000 rounds, all volumes; wallet ante = its best score)
+first play wallet: not allowed (twin and triple are locked until a best score exists)
+mid wallet (ante 10)       ante in= 10.00 payout out=  6.27 fee vault->treasury=0.69 wallet net= -3.73 VAULT NET=  3.04 (tokens per round, + means vault gains)
+mid wallet (ante 30)       ante in= 30.00 payout out= 18.81 fee vault->treasury=0.69 wallet net=-11.19 VAULT NET= 10.50 (tokens per round, + means vault gains)
+mid wallet (ante 100)      ante in=100.00 payout out= 62.70 fee vault->treasury=0.69 wallet net=-37.30 VAULT NET= 36.61 (tokens per round, + means vault gains)
+-- same at today's CAPH volume ($0 to $500, q=0), 400 rounds
+mid wallet (ante 30)       ante in= 30.00 payout out= 10.95 fee vault->treasury=1.25 wallet net=-19.05 VAULT NET= 17.80 (tokens per round, + means vault gains)
+-- score histogram (bucket start: rounds), width 5
+0:805  5:53  10:2  15:120  20:20
+
+=== WALLET LIFECYCLE (200 house-bot wallets x 30 daily plays, policy: single only) ===
+day 1 (free first play) vault net per wallet: -33.10
+days 2-30 vault net per wallet-day: 9.52  (treasury fee per wallet-day 0.12)
+30-day vault net per wallet: 243.1   avg final best score 47.7  max ante seen 98
+scaled to 1000 NEW wallets per day: day-1 vault net -33105 tokens per day just from free first plays
+scaled to 1000 returning wallets in days 2-30: 9525 tokens per day
+
+=== WALLET LIFECYCLE (200 house-bot wallets x 30 daily plays, policy: single then twin/triple) ===
+day 1 (free first play) vault net per wallet: -34.68
+days 2-30 vault net per wallet-day: 10.66  (treasury fee per wallet-day 0.53)
+30-day vault net per wallet: 274.5   avg final best score 38.6  max ante seen 98
+scaled to 1000 NEW wallets per day: day-1 vault net -34680 tokens per day just from free first plays
+scaled to 1000 returning wallets in days 2-30: 10661 tokens per day
+
+replay check: 0 of 3000 records failed verification

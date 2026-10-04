@@ -1,0 +1,23 @@
+# dependencies and build output
+node_modules/
+dist/
+.next/
+.vercel/
+*.tsbuildinfo
+coverage/
+
+# secrets and local data
+.env
+.env.*
+!.env.example
+data/
+.data/
+
+# Foundry
+contracts/out/
+contracts/cache/
+contracts/broadcast/
+
+# editors, OS
+.DS_Store
+*.log
