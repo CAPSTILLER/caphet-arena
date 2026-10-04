@@ -22,7 +22,7 @@ export type ThemeColorKey = (typeof THEME_KEYS)[number];
 /** Black background, white platforms, red coins and outlines, yellow-orange hub. This is the default. */
 export const DEFAULT_THEME: Theme = {
   bg: '#000000', text: '#f2f2f2', coin: '#e0182d', coin2: '#6b1a24', coinByQuality: false,
-  platform: '#ffffff', table: '#ffffff', ring: '#e0182d', hub: '#f5a000', hubFill: '#000000', bot: '#2f6bff', fell: '#ff3b3b', cashed: '#f5a000',
+  platform: '#ffffff', table: '#e0e0e0', ring: '#e0182d', hub: '#f5a000', hubFill: '#000000', bot: '#2f6bff', fell: '#ff3b3b', cashed: '#f5a000',
 };
 
 export const PRESETS: { id: string; name: string; theme: Theme }[] = [
@@ -33,7 +33,7 @@ export const PRESETS: { id: string; name: string; theme: Theme }[] = [
   },
   {
     id: 'paper', name: 'Paper',
-    theme: { bg: '#f4f1ea', text: '#1a1a1a', coin: '#c2182b', coin2: '#d9b8bc', coinByQuality: false, platform: '#ffffff', table: '#fbfaf7', ring: '#1a1a1a', hub: '#b36b00', hubFill: '#efe9da', bot: '#1f5eff', fell: '#d00000', cashed: '#b36b00' },
+    theme: { bg: '#f4f1ea', text: '#1a1a1a', coin: '#c2182b', coin2: '#d9b8bc', coinByQuality: false, platform: '#ffffff', table: '#ece7da', ring: '#1a1a1a', hub: '#b36b00', hubFill: '#efe9da', bot: '#1f5eff', fell: '#d00000', cashed: '#b36b00' },
   },
   {
     id: 'gold', name: 'Gold on black',
@@ -128,9 +128,12 @@ export function coinTone(base: string, stackIdx: number, i: number): CoinTone {
 
 // ---- saving and sharing ----------------------------------------------------------------------
 
-/** Old saved themes had a light grey hub fill. Move those to the new black default (only when it is exactly the old default). */
+/** Old saved themes had a light grey hub fill and white tables on white platforms. Move those to the new defaults (only when they are exactly the old defaults). */
 export function migrateTheme(t: Theme): Theme {
-  return t.hubFill === '#e6e6e6' ? { ...t, hubFill: DEFAULT_THEME.hubFill } : t;
+  let out = t;
+  if (out.hubFill === '#e6e6e6') out = { ...out, hubFill: DEFAULT_THEME.hubFill };
+  if (out.table === '#ffffff' && out.platform === '#ffffff') out = { ...out, table: DEFAULT_THEME.table }; // tables used to match the platform exactly
+  return out;
 }
 
 /** Accept anything, keep only valid colours, fill the rest from the default. */

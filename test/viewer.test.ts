@@ -131,6 +131,16 @@ describe('tight ring around the hub (the eye)', () => {
     expect(TIGHT).toBeLessThan(1);
   });
 
+  it('tables use their own surface colour, different from the platform, in every preset', () => {
+    expect(DEFAULT_THEME.table).not.toBe(DEFAULT_THEME.platform);
+    for (const p of PRESETS) expect(p.theme.table, p.id).not.toBe(p.theme.platform);
+    // old saved themes where tables matched the platform exactly get a distinct table colour; a colour picked on purpose is kept
+    expect(migrateTheme({ ...DEFAULT_THEME, table: '#ffffff', platform: '#ffffff' }).table).toBe(DEFAULT_THEME.table);
+    expect(migrateTheme({ ...DEFAULT_THEME, table: '#ffffff', platform: '#101010' }).table).toBe('#ffffff');
+    expect(migrateTheme({ ...DEFAULT_THEME, table: '#ffeedd', platform: '#ffffff' }).table).toBe('#ffeedd');
+    expect(sanitizeTheme({ table: '#123456' }).table).toBe('#123456');
+  });
+
   it('the hub is black by default and the old light grey hub moves to black', () => {
     expect(DEFAULT_THEME.hubFill).toBe('#000000');
     expect(PRESETS[0]!.theme.hubFill).toBe('#000000');

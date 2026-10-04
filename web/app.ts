@@ -156,8 +156,18 @@ function fit(cv: HTMLCanvasElement, h?: number): CanvasRenderingContext2D {
 }
 function disc(ctx: CanvasRenderingContext2D, x: number, y: number, r: number): void { ctx.beginPath(); ctx.arc(x, y, Math.max(0, r), 0, Math.PI * 2); }
 
-/** One table seen from above, centred at (cx, cy) with the table edge at radius R (canvas pixels). */
-function drawOverheadAt(ctx: CanvasRenderingContext2D, st: RoundState, cx: number, cy: number, R: number, fresh: number, quality: number): void {
+/** A filled circle with a solid outline band on the inside of its edge, so the band touches the fill with no gap. */
+function banded(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, fill: string, band: string, w: number): void {
+  disc(ctx, x, y, r); ctx.fillStyle = band; ctx.fill();
+  disc(ctx, x, y, r - Math.min(w, r * 0.45)); ctx.fillStyle = fill; ctx.fill();
+}
+
+/**
+ * One table seen from above, centred at (cx, cy) with the table edge at radius R (canvas pixels).
+ * With surface = false the caller has already painted the table surface (the table circle in the ring views),
+ * so only the guide rings, stack homes and coins are drawn.
+ */
+function drawOverheadAt(ctx: CanvasRenderingContext2D, st: RoundState, cx: number, cy: number, R: number, fresh: number, quality: number, surface = true): void {
   const k = R / 200; // line widths and shadows scale with the drawing
   let viewR = st.tableRadiusMm;
   if (st.mode === 'single') { // single stacks only reach about 100 mm, so zoom in on the middle of the big table
@@ -165,15 +175,19 @@ function drawOverheadAt(ctx: CanvasRenderingContext2D, st: RoundState, cx: numbe
     for (const c of st.stacks[0]!) far = Math.max(far, Math.hypot(c.x - st.homes[0]!.x, c.y - st.homes[0]!.y));
     viewR = Math.min(st.tableRadiusMm, Math.max(120, far + COIN_R + 30));
   }
-  const scale = (R - 2 * k) / viewR;
+  const scale = R / viewR;
   const P = (x: number, y: number): [number, number] => [cx + (x - st.tableCenter.x) * scale, cy + (y - st.tableCenter.y) * scale];
-  // the table surface
+  // the table surface, with its outline as a solid band inside the edge
   const tr = st.tableRadiusMm * scale;
   const fillR = Math.min(tr, R);
-  const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(10, fillR));
-  g.addColorStop(0, T.table); g.addColorStop(1, mixHex(T.table, contrastOn(T.table), 0.07));
-  disc(ctx, cx, cy, fillR); ctx.fillStyle = g; ctx.fill();
-  ctx.strokeStyle = rgba(T.ring, 0.9); ctx.lineWidth = Math.max(1, 2 * k); ctx.stroke();
+  if (surface) {
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, Math.max(10, fillR));
+    g.addColorStop(0, T.table); g.addColorStop(1, mixHex(T.table, contrastOn(T.table), 0.07));
+    disc(ctx, cx, cy, fillR); ctx.fillStyle = T.ring; ctx.fill();
+    disc(ctx, cx, cy, Math.max(1, fillR - Math.max(1.5, 2 * k))); ctx.fillStyle = g; ctx.fill();
+  } else if (tr < R * 0.999) {
+    disc(ctx, cx, cy, tr); ctx.strokeStyle = rgba(T.ring, 0.4); ctx.lineWidth = Math.max(0.8, k); ctx.stroke(); // the real edge of a small table
+  }
   ctx.strokeStyle = rgba(T.ring, 0.14); ctx.lineWidth = Math.max(0.5, k);
   for (let rr = 50; rr < st.tableRadiusMm && rr * scale < R; rr += 50) { disc(ctx, cx, cy, rr * scale); ctx.stroke(); }
   // where each stack starts
@@ -410,8 +424,7 @@ function afterSelect(): void { lastOv = null; S.table = Math.min(S.table, 9); bu
 const jitter = (seat: number, salt: number): number => ((Math.imul(seat + salt * 977, 2654435761) >>> 0) % 1000) / 500 - 1; // -1..1, steady per seat
 
 function hubDraw(ctx: CanvasRenderingContext2D, cx: number, cy: number, hubR: number, line: string): void {
-  disc(ctx, cx, cy, hubR); ctx.fillStyle = T.hubFill; ctx.fill();
-  ctx.strokeStyle = T.hub; ctx.lineWidth = Math.max(1, hubR * 0.035); ctx.stroke();
+  banded(ctx, cx, cy, hubR, T.hubFill, T.hub, Math.max(1.5, hubR * 0.04));
   if (!S.text) return;
   ctx.fillStyle = T.hub; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = `bold ${Math.max(7, hubR * 0.2)}px ui-monospace,monospace`;
@@ -419,15 +432,14 @@ function hubDraw(ctx: CanvasRenderingContext2D, cx: number, cy: number, hubR: nu
   ctx.fillText('COLLECTION', cx, cy - lh * 1.2); ctx.fillText('CENTER', cx, cy - lh * 0.2); ctx.fillText('HUB', cx, cy + lh * 0.8);
   if (line) { ctx.font = `${Math.max(6, hubR * 0.13)}px ui-monospace,monospace`; ctx.globalAlpha *= 0.85; ctx.fillText(line, cx, cy + lh * 1.75); ctx.globalAlpha /= 0.85; }
 }
-function node(ctx: CanvasRenderingContext2D, p: { x: number; y: number; r: number }, lw: number, stroke: string, hot: boolean): void {
-  disc(ctx, p.x, p.y, p.r); ctx.fillStyle = T.platform; ctx.fill();
-  ctx.strokeStyle = hot ? T.hub : stroke; ctx.lineWidth = hot ? lw * 1.8 : lw; ctx.stroke();
+function node(ctx: CanvasRenderingContext2D, p: { x: number; y: number; r: number }, lw: number, stroke: string, hot: boolean, fill = T.platform): void {
+  banded(ctx, p.x, p.y, p.r, fill, hot ? T.hub : stroke, hot ? lw * 1.8 : lw);
 }
 /** One table as a small circle with its live stack spots (1 for single, 2 for twin, 3 for triple). */
 function tableDot(ctx: CanvasRenderingContext2D, q: { x: number; y: number; r: number }, c: Cell, seat: number, base: string): void {
-  ctx.fillStyle = T.platform; disc(ctx, q.x, q.y, q.r); ctx.fill();
-  if (c.flash > 0 && c.phase !== 'play') { disc(ctx, q.x, q.y, q.r); ctx.fillStyle = rgba(c.phase === 'fell' ? T.fell : T.cashed, 0.55 * c.flash); ctx.fill(); }
-  ctx.strokeStyle = rgba(T.ring, 0.85); ctx.lineWidth = Math.max(0.6, q.r * 0.09); disc(ctx, q.x, q.y, q.r); ctx.stroke();
+  const bw = Math.max(0.7, q.r * 0.1);
+  banded(ctx, q.x, q.y, q.r, T.table, T.ring, bw);
+  if (c.flash > 0 && c.phase !== 'play') { disc(ctx, q.x, q.y, q.r - bw); ctx.fillStyle = rgba(c.phase === 'fell' ? T.fell : T.cashed, 0.55 * c.flash); ctx.fill(); }
   if (c.phase === 'wait') return;
   if (c.phase === 'fell') { disc(ctx, q.x, q.y, q.r * 0.6); ctx.strokeStyle = T.fell; ctx.lineWidth = Math.max(1, q.r * (0.2 + 0.2 * c.flash)); ctx.stroke(); return; }
   const spots = spotsFor(S.mode === 'single' ? 1 : S.mode === 'twin' ? 2 : 3);
@@ -474,7 +486,7 @@ function drawStage(rep: TablesReply | null): void {
   }
   // the big stadium circle
   const lw = Math.max(1.5, w * 0.005);
-  disc(ctx, cx, cy, maxR * 1.012); ctx.fillStyle = T.platform; ctx.fill(); ctx.strokeStyle = T.ring; ctx.lineWidth = lw * 1.6; ctx.stroke();
+  banded(ctx, cx, cy, maxR * 1.012, T.platform, T.ring, lw * 1.6);
   const ring = ringPositions(cx, cy, maxR, 10);
   let hubLine = '';
   if (S.text && ov && S.level <= 1) { let playing = 0; for (let i = 0; i < 1000; i++) if (cellOf(ov, i).phase === 'play') playing++; hubLine = `${playing} playing \u00b7 next in ${Math.max(0, Math.ceil((S.slotMs - (S.vt % S.slotMs)) / 1000))}s`; }
@@ -483,7 +495,7 @@ function drawStage(rep: TablesReply | null): void {
   const sec = S.vt - (ov?.slotStartMs ?? 0);
   void sec;
   if (S.level === 0) {
-    const lwSeg = Math.max(1, ringPositions(0, 0, ring.circleRadius * 0.95, 10).circleRadius * 0.2);
+    const lwSeg = Math.max(1, ringPositions(0, 0, ring.circleRadius - lw, 10).circleRadius * 0.2);
     // one batch of arcs per (kind, thickness bucket), so a whole view needs only a few strokes
     const segs: Record<string, Path2D> = {};
     const seg = (kind: string, b: number): Path2D => (segs[kind + b] ??= new Path2D());
@@ -492,7 +504,7 @@ function drawStage(rep: TablesReply | null): void {
     const arenaPlaying: number[] = [];
     ring.positions.forEach((p, a) => {
       node(ctx, p, lw, T.ring, S.hover === a);
-      const inner = ringPositions(p.x, p.y, p.r * 0.95, 10);
+      const inner = ringPositions(p.x, p.y, p.r - lw, 10);
       let playing = 0;
       inner.positions.forEach((q, sb) => {
         const cells: Cell[] = [];
@@ -500,17 +512,17 @@ function drawStage(rep: TablesReply | null): void {
         const ty = tally(cells);
         playing += ty.play;
         // sub-arena dot: platform, then a growing disc and a pulse when a coin lands
-        disc(ctx, q.x, q.y, q.r); ctx.fillStyle = T.platform; ctx.fill();
-        if (ty.flash > 0.02 && (ty.fell || ty.cashed)) { ctx.fillStyle = rgba(ty.fell ? T.fell : T.cashed, 0.5 * ty.flash); ctx.fill(); }
-        ctx.strokeStyle = rgba(T.ring, 0.85); ctx.lineWidth = Math.max(0.6, q.r * 0.08); ctx.stroke();
-        const rd = q.r * (0.16 + 0.42 * ty.size) * (1 + 0.18 * ty.pulse);
-        disc(ctx, q.x, q.y, rd); ctx.fillStyle = mixHex(T.platform, base, Math.min(1, 0.35 + ty.size)); ctx.fill();
+        const bq = Math.max(0.7, q.r * 0.09);
+        banded(ctx, q.x, q.y, q.r, T.table, T.ring, bq);
+        if (ty.flash > 0.02 && (ty.fell || ty.cashed)) { disc(ctx, q.x, q.y, q.r - bq); ctx.fillStyle = rgba(ty.fell ? T.fell : T.cashed, 0.5 * ty.flash); ctx.fill(); }
+        const rd = q.r * (0.14 + 0.36 * ty.size) * (1 + 0.18 * ty.pulse);
+        disc(ctx, q.x, q.y, rd); ctx.fillStyle = mixHex(T.table, base, Math.min(1, 0.35 + ty.size)); ctx.fill();
         if (ty.pulse > 0.05) { disc(ctx, q.x, q.y, rd + q.r * 0.1); ctx.strokeStyle = rgba(T.hub, ty.pulse); ctx.lineWidth = Math.max(0.6, q.r * 0.07); ctx.stroke(); }
         // ring of 10 arcs, one per table
         for (let t = 0; t < 10; t++) {
           const c = cells[t]!;
           const [a0, a1] = arcFor(t);
-          const rr = q.r * 0.8;
+          const rr = q.r * 0.74;
           const bucket = c.phase === 'wait' ? 0 : Math.min(3, Math.floor(c.size * 4));
           const path = seg(c.phase === 'wait' ? 'wait' : c.phase === 'fell' ? 'fell' : c.phase === 'play' ? (c.sinceMove < 250 ? 'pulse' : 'play') : 'cashed', bucket);
           path.moveTo(q.x + rr * Math.cos(a0), q.y + rr * Math.sin(a0)); path.arc(q.x, q.y, rr, a0, a1);
@@ -527,7 +539,7 @@ function drawStage(rep: TablesReply | null): void {
     const styleOf: Record<string, string> = { wait: rgba(T.ring, 0.22), play: base, pulse: T.hub, cashed: T.cashed, fell: T.fell };
     for (const key of Object.keys(segs)) {
       const kind = key.replace(/\d$/, ''), bucket = Number(key.slice(-1));
-      ctx.lineWidth = kind === 'wait' ? lwSeg * 0.5 : lwSeg * (0.5 + 0.4 * bucket);
+      ctx.lineWidth = kind === 'wait' ? lwSeg * 0.5 : lwSeg * (0.45 + 0.33 * bucket);
       ctx.strokeStyle = styleOf[kind]!; ctx.stroke(segs[key]!);
     }
     ctx.lineWidth = lwSeg * 2.4; ctx.globalAlpha *= 0.55; ctx.strokeStyle = T.fell; ctx.stroke(flashFell); ctx.strokeStyle = T.cashed; ctx.stroke(flashCash); ctx.globalAlpha /= 0.55;
@@ -542,7 +554,7 @@ function drawStage(rep: TablesReply | null): void {
   } else if (S.level === 1) {
     ring.positions.forEach((p, sb) => {
       node(ctx, p, lw, T.ring, S.hover === sb);
-      const inner = ringPositions(p.x, p.y, p.r * 0.95, 10);
+      const inner = ringPositions(p.x, p.y, p.r - lw, 10);
       const cells: Cell[] = [];
       inner.positions.forEach((q, t) => {
         const seat = S.arena * 100 + sb * 10 + t;
@@ -564,20 +576,21 @@ function drawStage(rep: TablesReply | null): void {
       let stroke = T.ring;
       let st: RoundState | null = null; let pr = { k: 0, waiting: true, since: 1 };
       if (plan && rep) { pr = progress(rep, plan); st = stateAt(plan, pr.k); if (!pr.waiting) { if (st.status === 'fell') stroke = T.fell; else if (st.status !== 'active') stroke = T.cashed; } }
-      node(ctx, p, lw * 1.2, stroke, S.hover === t);
+      node(ctx, p, lw * 1.2, stroke, S.hover === t, T.table);
       if (!plan || !st) return;
       const R = p.r * (S.text ? 0.66 : 0.84);
-      drawOverheadAt(ctx, st, p.x, p.y - p.r * (S.text ? 0.2 : 0.04), R, pr.since < 1 && !pr.waiting ? pr.since : 1, plan.quality);
+      drawOverheadAt(ctx, st, p.x, p.y - p.r * (S.text ? 0.2 : 0.04), R, pr.since < 1 && !pr.waiting ? pr.since : 1, plan.quality, false);
       const dev = p.r / Math.min(2, window.devicePixelRatio || 1);
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = labelCol;
+      const tableLabel = contrastOn(T.table);
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = tableLabel;
       if (!S.text) { disc(ctx, p.x, p.y + p.r * 0.9, Math.max(2, p.r * 0.06)); ctx.fillStyle = T.bot; ctx.fill(); return; }
       if (dev >= 40) {
         const nf = p.r * 0.14;
         ctx.font = `${nf}px ui-monospace,monospace`;
         const nm = plan.botName; const tw = ctx.measureText(nm).width;
         ctx.fillText(nm, p.x + p.r * 0.05, p.y + p.r * 0.6);
-        disc(ctx, p.x - tw / 2 - p.r * 0.06, p.y + p.r * 0.6, Math.max(2, p.r * 0.045)); ctx.fillStyle = T.bot; ctx.fill(); ctx.fillStyle = labelCol;
-      } else { disc(ctx, p.x, p.y + p.r * 0.62, Math.max(2, p.r * 0.07)); ctx.fillStyle = T.bot; ctx.fill(); ctx.fillStyle = labelCol; }
+        disc(ctx, p.x - tw / 2 - p.r * 0.06, p.y + p.r * 0.6, Math.max(2, p.r * 0.045)); ctx.fillStyle = T.bot; ctx.fill(); ctx.fillStyle = tableLabel;
+      } else { disc(ctx, p.x, p.y + p.r * 0.62, Math.max(2, p.r * 0.07)); ctx.fillStyle = T.bot; ctx.fill(); ctx.fillStyle = tableLabel; }
       ctx.font = `bold ${p.r * 0.2}px ui-monospace,monospace`;
       ctx.fillText(scoreText(plan, st, pr.waiting), p.x, p.y + p.r * 0.82);
     });
@@ -683,10 +696,10 @@ function legendHtml(): string {
   const chip = (style: string): string => `<span style="display:inline-block;width:18px;height:18px;border-radius:50%;flex:none;${style}"></span>`;
   const b = coinBase(T, 1);
   return `<div class="legend">
-    <div>${chip(`background:${T.platform};border:2px solid ${T.ring}`)} waiting for its bot to start</div>
+    <div>${chip(`background:${T.table};border:2px solid ${T.ring}`)} waiting for its bot to start</div>
     <div>${chip(`background:${b}`)} playing: a bigger disc is a taller stack</div>
     <div>${chip(`background:${b};border:3px solid ${T.cashed}`)} cashed out or connected</div>
-    <div>${chip(`background:${T.platform};border:3px solid ${T.fell}`)} fell</div>
+    <div>${chip(`background:${T.table};border:3px solid ${T.fell}`)} fell</div>
     <div>${chip(`background:${T.platform};border:3px dotted ${b}`)} ring of 10 arcs, one per table. Faint = waiting. Coin colour = placing coins (thicker arc = taller stack). Cashed colour = cashed out. Fell colour = fell</div>
     <div>${chip(`background:${T.platform};border:2px solid ${T.hub};box-shadow:0 0 6px ${T.hub}`)} bright flash: a coin just landed</div>
     <div>${chip(`background:${T.bot};width:10px;height:10px;margin:0 4px`)} a bot disc</div>
@@ -712,7 +725,7 @@ function renderRight(rep: TablesReply | null): void {
     }).join('')}</ul><h3 style="margin-top:14px">HOW TO READ THE COLOURS</h3>${legendHtml()}`;
     return;
   }
-  const key = `L${S.level}|${S.arena}|${T.coin}|${T.fell}|${T.platform}|${T.cashed}|${T.bot}|${T.ring}`;
+  const key = `L${S.level}|${S.arena}|${T.coin}|${T.fell}|${T.platform}|${T.table}|${T.cashed}|${T.bot}|${T.ring}`;
   if (key === rightKey) return;
   rightKey = key; lastFocusKey = '';
   root.innerHTML = `<h3>${S.level === 0 ? 'ARENA OF ARENAS' : 'ARENA ' + S.arena}</h3>
