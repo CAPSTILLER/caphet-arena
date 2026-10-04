@@ -1,7 +1,7 @@
 // Browser side of the watch-only demo. Bundled with the real engine so the browser replays every round itself.
 import { cashOut, createRound, placeCoin } from '../src/engine.js';
 import type { Mode, Move, RoundState } from '../src/types.js';
-import { type Cell, hitRing, liveCell, ringPositions, tally } from './geometry.js';
+import { type Cell, arcFor, hitRing, liveCell, ringPositions, spotsFor, tally } from './geometry.js';
 import {
   DEFAULT_THEME, PRESETS, type Theme, type ThemeColorKey, THEME_KEYS, coinBase, coinTone, contrastOn, mixHex, normHex, rgba, sameTheme, sanitizeTheme, themeFromHash, themeToHash,
 } from './theme.js';
@@ -27,7 +27,7 @@ const esc = (s: string): string => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', 
 const S = {
   mode: 'single' as Mode, arena: 0, sub: 0, vol: 'live', table: 0,
   view: 'rings' as 'rings' | 'grid', level: 0, hover: -1,
-  anim: null as null | { t0: number; dir: number },
+  anim: null as null | { t0: number; dir: number }, dirty: true,
   speed: 1, paused: false, vt: 0, lastReal: 0, clockOffset: 0, serverSlot: 0, slotMs: 60000,
   config: null as any, summary: null as Summary | null,
 };
@@ -45,7 +45,7 @@ function setTheme(patch: Partial<Theme>, save = true): void {
   applyTheme();
   if (save) { try { localStorage.setItem(THEME_STORE, JSON.stringify(T)); } catch { /* private mode */ } }
   cards.forEach((c) => { c.lastK = -1; });
-  lastFocusKey = ''; rightKey = '';
+  lastFocusKey = ''; rightKey = ''; S.dirty = true;
   syncColorInputs();
 }
 function loadTheme(): void {
@@ -82,7 +82,7 @@ function loadSlot(slot: number): Promise<TablesReply> {
       S.clockOffset = j.serverNow - Date.now();
       S.serverSlot = Math.floor(j.serverNow / j.slotMs);
       S.slotMs = j.slotMs;
-      repStore.set(k, j);
+      repStore.set(k, j); S.dirty = true;
       if (repStore.size > 40) repStore.delete(repStore.keys().next().value!);
       return j;
     });
@@ -103,7 +103,7 @@ function loadOverview(slot: number): void {
     const j = (await r.json()) as Overview;
     S.clockOffset = j.serverNow - Date.now();
     S.slotMs = j.slotMs;
-    ovStore.set(k, j);
+    ovStore.set(k, j); S.dirty = true;
     if (ovStore.size > 12) ovStore.delete(ovStore.keys().next().value!);
     return j;
   });
@@ -340,7 +340,7 @@ function go(level: number, arena?: number, sub?: number, table?: number): void {
   if (arena !== undefined) S.arena = arena;
   if (sub !== undefined) S.sub = sub;
   if (table !== undefined) S.table = table;
-  S.hover = -1;
+  S.hover = -1; S.dirty = true;
   S.anim = { t0: performance.now(), dir };
   lastFocusKey = ''; rightKey = ''; closeKey = '';
   buildCrumb(); applyViewClasses(); syncSel();
@@ -352,8 +352,8 @@ function applyViewClasses(): void {
   $('gridPick').style.display = S.view === 'grid' ? 'flex' : 'none';
   ($('back') as HTMLButtonElement).disabled = !(S.view === 'rings' && S.level > 0);
   const hints = [
-    'Tap an arena to open it. The small circles inside are its 10 sub-arenas, coloured live by how full the stacks are.',
-    `Arena ${S.arena}: tap a sub-arena. The dots inside are its 10 tables. A bigger disc means a taller stack.`,
+    'Each arena holds 10 sub-arenas. Every small circle has 10 arcs, one per table: thin and faint = waiting for its bot, red = placing coins (the arc gets thicker as the stack grows), orange = cashed out, bright red = fell. The disc in the middle grows as coins land. Tap an arena to open it.',
+    `Arena ${S.arena}: each circle is a sub-arena and each dot inside is one of its 10 tables. Discs grow as coins land (twin shows 2 stack spots per table, triple shows 3). Tap a sub-arena.`,
     `Arena ${S.arena}, sub-arena ${S.sub}: tap a table to see its stack up close.`,
     '',
   ];
@@ -374,6 +374,7 @@ function buildCrumb(): void {
   }
 }
 function buildControls(): void {
+  S.dirty = true;
   const modes = $('modes');
   modes.innerHTML = '';
   MODES.forEach((m) => { const b = document.createElement('button'); b.textContent = m; b.className = m === S.mode ? 'on' : ''; b.onclick = () => { S.mode = m; S.summary = null; afterSelect(); }; modes.appendChild(b); });
@@ -404,28 +405,36 @@ function afterSelect(): void { lastOv = null; S.table = Math.min(S.table, 9); bu
 // ---- the ring stage (hub, arenas, sub-arenas, tables) -------------------------------------------
 const jitter = (seat: number, salt: number): number => ((Math.imul(seat + salt * 977, 2654435761) >>> 0) % 1000) / 500 - 1; // -1..1, steady per seat
 
-function hubDraw(ctx: CanvasRenderingContext2D, cx: number, cy: number, hubR: number): void {
+function hubDraw(ctx: CanvasRenderingContext2D, cx: number, cy: number, hubR: number, line: string): void {
   disc(ctx, cx, cy, hubR); ctx.fillStyle = T.hubFill; ctx.fill();
   ctx.strokeStyle = T.hub; ctx.lineWidth = Math.max(1, hubR * 0.035); ctx.stroke();
   ctx.fillStyle = T.hub; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = `bold ${Math.max(7, hubR * 0.2)}px ui-monospace,monospace`;
   const lh = hubR * 0.24;
-  ctx.fillText('COLLECTION', cx, cy - lh); ctx.fillText('CENTER', cx, cy); ctx.fillText('HUB', cx, cy + lh);
+  ctx.fillText('COLLECTION', cx, cy - lh * 1.2); ctx.fillText('CENTER', cx, cy - lh * 0.2); ctx.fillText('HUB', cx, cy + lh * 0.8);
+  if (line) { ctx.font = `${Math.max(6, hubR * 0.13)}px ui-monospace,monospace`; ctx.globalAlpha *= 0.85; ctx.fillText(line, cx, cy + lh * 1.75); ctx.globalAlpha /= 0.85; }
 }
 function node(ctx: CanvasRenderingContext2D, p: { x: number; y: number; r: number }, lw: number, stroke: string, hot: boolean): void {
   disc(ctx, p.x, p.y, p.r); ctx.fillStyle = T.platform; ctx.fill();
   ctx.strokeStyle = hot ? T.hub : stroke; ctx.lineWidth = hot ? lw * 1.8 : lw; ctx.stroke();
 }
+/** One table as a small circle with its live stack spots (1 for single, 2 for twin, 3 for triple). */
 function tableDot(ctx: CanvasRenderingContext2D, q: { x: number; y: number; r: number }, c: Cell, seat: number, base: string): void {
   ctx.fillStyle = T.platform; disc(ctx, q.x, q.y, q.r); ctx.fill();
-  ctx.strokeStyle = rgba(T.ring, 0.85); ctx.lineWidth = Math.max(0.6, q.r * 0.09); ctx.stroke();
+  if (c.flash > 0 && c.phase !== 'play') { disc(ctx, q.x, q.y, q.r); ctx.fillStyle = rgba(c.phase === 'fell' ? T.fell : T.cashed, 0.55 * c.flash); ctx.fill(); }
+  ctx.strokeStyle = rgba(T.ring, 0.85); ctx.lineWidth = Math.max(0.6, q.r * 0.09); disc(ctx, q.x, q.y, q.r); ctx.stroke();
   if (c.phase === 'wait') return;
-  if (c.phase === 'fell') { disc(ctx, q.x, q.y, q.r * 0.6); ctx.strokeStyle = T.fell; ctx.lineWidth = Math.max(1, q.r * 0.2); ctx.stroke(); return; }
-  const r = q.r * (0.22 + 0.7 * c.size);
-  const off = (1 - c.size) * q.r * 0.3;
-  const x = q.x + jitter(seat, 1) * off, y = q.y + jitter(seat + 7, 2) * off;
-  disc(ctx, x, y, r); ctx.fillStyle = base; ctx.fill();
-  if (c.phase === 'cashed' || c.phase === 'touched') { ctx.strokeStyle = T.cashed; ctx.lineWidth = Math.max(0.8, q.r * 0.16); ctx.stroke(); }
+  if (c.phase === 'fell') { disc(ctx, q.x, q.y, q.r * 0.6); ctx.strokeStyle = T.fell; ctx.lineWidth = Math.max(1, q.r * (0.2 + 0.2 * c.flash)); ctx.stroke(); return; }
+  const spots = spotsFor(S.mode === 'single' ? 1 : S.mode === 'twin' ? 2 : 3);
+  const pulse = c.phase === 'play' ? Math.max(0, 1 - c.sinceMove / 300) : 0;
+  spots.forEach((sp, i) => {
+    const off = (1 - c.size) * q.r * 0.25 * (spots.length === 1 ? 1 : 0);
+    const x = q.x + sp.x * q.r + jitter(seat, 1 + i) * off, y = q.y + sp.y * q.r + jitter(seat + 7, 2 + i) * off;
+    const r = q.r * (spots.length === 1 ? 0.22 + 0.7 * c.size : sp.r * (0.35 + 0.6 * c.size)) * (1 + 0.1 * pulse);
+    disc(ctx, x, y, r); ctx.fillStyle = base; ctx.fill();
+    if (pulse > 0) { disc(ctx, x, y, r + q.r * 0.12); ctx.strokeStyle = rgba(T.hub, pulse); ctx.lineWidth = Math.max(0.8, q.r * 0.1); ctx.stroke(); }
+    else if (c.phase === 'cashed' || c.phase === 'touched') { ctx.strokeStyle = T.cashed; ctx.lineWidth = Math.max(0.8, q.r * 0.16); ctx.stroke(); }
+  });
 }
 function currentOverview(): Overview | null {
   const slot = Math.floor(S.vt / S.slotMs);
@@ -462,38 +471,86 @@ function drawStage(rep: TablesReply | null): void {
   const lw = Math.max(1.5, w * 0.005);
   disc(ctx, cx, cy, maxR * 1.035); ctx.fillStyle = T.platform; ctx.fill(); ctx.strokeStyle = T.ring; ctx.lineWidth = lw * 1.6; ctx.stroke();
   const ring = ringPositions(cx, cy, maxR, 10);
-  hubDraw(ctx, cx, cy, ring.ringRadius * 0.56);
+  let hubLine = '';
+  if (ov && S.level <= 1) { let playing = 0; for (let i = 0; i < 1000; i++) if (cellOf(ov, i).phase === 'play') playing++; hubLine = `${playing} playing \u00b7 next in ${Math.max(0, Math.ceil((S.slotMs - (S.vt % S.slotMs)) / 1000))}s`; }
+  hubDraw(ctx, cx, cy, ring.ringRadius * 0.56, hubLine);
   const labelCol = contrastOn(T.platform);
   const sec = S.vt - (ov?.slotStartMs ?? 0);
   void sec;
   if (S.level === 0) {
+    const lwSeg = Math.max(1, ringPositions(0, 0, ring.circleRadius * 0.86, 10).circleRadius * 0.2);
+    // one batch of arcs per (kind, thickness bucket), so a whole view needs only a few strokes
+    const segs: Record<string, Path2D> = {};
+    const seg = (kind: string, b: number): Path2D => (segs[kind + b] ??= new Path2D());
+    const flashFell = new Path2D(), flashCash = new Path2D();
+    const live: { x: number; y: number; r: number; ty: ReturnType<typeof tally> }[] = [];
+    const arenaPlaying: number[] = [];
     ring.positions.forEach((p, a) => {
       node(ctx, p, lw, T.ring, S.hover === a);
       const inner = ringPositions(p.x, p.y, p.r * 0.86, 10);
-      inner.positions.forEach((q, s) => {
+      let playing = 0;
+      inner.positions.forEach((q, sb) => {
         const cells: Cell[] = [];
-        for (let t = 0; t < 10; t++) cells.push(cellOf(ov, a * 100 + s * 10 + t));
+        for (let t = 0; t < 10; t++) cells.push(cellOf(ov, a * 100 + sb * 10 + t));
         const ty = tally(cells);
-        const fill = mixHex(T.platform, base, Math.min(1, ty.size));
-        disc(ctx, q.x, q.y, q.r); ctx.fillStyle = fill; ctx.fill();
-        ctx.strokeStyle = rgba(T.ring, 0.85); ctx.lineWidth = Math.max(0.6, q.r * 0.1); ctx.stroke();
-        if (ty.fell > 0) { disc(ctx, q.x, q.y - q.r * 0.55, Math.max(1, q.r * 0.17)); ctx.fillStyle = T.fell; ctx.fill(); }
+        playing += ty.play;
+        // sub-arena dot: platform, then a growing disc and a pulse when a coin lands
+        disc(ctx, q.x, q.y, q.r); ctx.fillStyle = T.platform; ctx.fill();
+        if (ty.flash > 0.02 && (ty.fell || ty.cashed)) { ctx.fillStyle = rgba(ty.fell ? T.fell : T.cashed, 0.5 * ty.flash); ctx.fill(); }
+        ctx.strokeStyle = rgba(T.ring, 0.85); ctx.lineWidth = Math.max(0.6, q.r * 0.08); ctx.stroke();
+        const rd = q.r * (0.16 + 0.42 * ty.size) * (1 + 0.18 * ty.pulse);
+        disc(ctx, q.x, q.y, rd); ctx.fillStyle = mixHex(T.platform, base, Math.min(1, 0.35 + ty.size)); ctx.fill();
+        if (ty.pulse > 0.05) { disc(ctx, q.x, q.y, rd + q.r * 0.1); ctx.strokeStyle = rgba(T.hub, ty.pulse); ctx.lineWidth = Math.max(0.6, q.r * 0.07); ctx.stroke(); }
+        // ring of 10 arcs, one per table
+        for (let t = 0; t < 10; t++) {
+          const c = cells[t]!;
+          const [a0, a1] = arcFor(t);
+          const rr = q.r * 0.8;
+          const bucket = c.phase === 'wait' ? 0 : Math.min(3, Math.floor(c.size * 4));
+          const path = seg(c.phase === 'wait' ? 'wait' : c.phase === 'fell' ? 'fell' : c.phase === 'play' ? (c.sinceMove < 250 ? 'pulse' : 'play') : 'cashed', bucket);
+          path.moveTo(q.x + rr * Math.cos(a0), q.y + rr * Math.sin(a0)); path.arc(q.x, q.y, rr, a0, a1);
+          if (c.flash > 0.25 && c.phase !== 'play' && c.phase !== 'wait') {
+            const fp = c.phase === 'fell' ? flashFell : flashCash;
+            fp.moveTo(q.x + rr * Math.cos(a0), q.y + rr * Math.sin(a0)); fp.arc(q.x, q.y, rr, a0, a1);
+          }
+        }
+        live.push({ x: q.x, y: q.y, r: q.r, ty });
       });
-      ctx.fillStyle = labelCol; ctx.globalAlpha *= 0.85; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `bold ${p.r * 0.34}px ui-monospace,monospace`; ctx.fillText(String(a), p.x, p.y);
-      ctx.globalAlpha /= 0.85;
+      arenaPlaying.push(playing);
     });
+    ctx.lineCap = 'butt';
+    const styleOf: Record<string, string> = { wait: rgba(T.ring, 0.22), play: base, pulse: T.hub, cashed: T.cashed, fell: T.fell };
+    for (const key of Object.keys(segs)) {
+      const kind = key.replace(/\d$/, ''), bucket = Number(key.slice(-1));
+      ctx.lineWidth = kind === 'wait' ? lwSeg * 0.5 : lwSeg * (0.5 + 0.4 * bucket);
+      ctx.strokeStyle = styleOf[kind]!; ctx.stroke(segs[key]!);
+    }
+    ctx.lineWidth = lwSeg * 2.4; ctx.globalAlpha *= 0.55; ctx.strokeStyle = T.fell; ctx.stroke(flashFell); ctx.strokeStyle = T.cashed; ctx.stroke(flashCash); ctx.globalAlpha /= 0.55;
+    ring.positions.forEach((p, a) => {
+      ctx.fillStyle = labelCol; ctx.globalAlpha *= 0.9; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      const dev = p.r / Math.min(2, window.devicePixelRatio || 1);
+      ctx.font = `bold ${p.r * (dev >= 36 ? 0.3 : 0.36)}px ui-monospace,monospace`; ctx.fillText(String(a), p.x, p.y - (dev >= 36 ? p.r * 0.07 : 0));
+      if (dev >= 36) { ctx.font = `${p.r * 0.12}px ui-monospace,monospace`; ctx.fillText(`${arenaPlaying[a]} live`, p.x, p.y + p.r * 0.2); }
+      ctx.globalAlpha /= 0.9;
+    });
+    void live;
   } else if (S.level === 1) {
-    ring.positions.forEach((p, s) => {
-      node(ctx, p, lw, T.ring, S.hover === s);
+    ring.positions.forEach((p, sb) => {
+      node(ctx, p, lw, T.ring, S.hover === sb);
       const inner = ringPositions(p.x, p.y, p.r * 0.88, 10);
+      const cells: Cell[] = [];
       inner.positions.forEach((q, t) => {
-        const seat = S.arena * 100 + s * 10 + t;
-        tableDot(ctx, q, cellOf(ov, seat), seat, base);
+        const seat = S.arena * 100 + sb * 10 + t;
+        const c = cellOf(ov, seat);
+        cells.push(c);
+        tableDot(ctx, q, c, seat, base);
       });
-      ctx.fillStyle = labelCol; ctx.globalAlpha *= 0.85; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = `bold ${p.r * 0.34}px ui-monospace,monospace`; ctx.fillText(String(s), p.x, p.y);
-      ctx.globalAlpha /= 0.85;
+      const ty = tally(cells);
+      const dev = p.r / Math.min(2, window.devicePixelRatio || 1);
+      ctx.fillStyle = labelCol; ctx.globalAlpha *= 0.9; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = `bold ${p.r * (dev >= 36 ? 0.3 : 0.36)}px ui-monospace,monospace`; ctx.fillText(String(sb), p.x, p.y - (dev >= 36 ? p.r * 0.07 : 0));
+      if (dev >= 36) { ctx.font = `${p.r * 0.12}px ui-monospace,monospace`; ctx.fillText(`${ty.play}/10 live`, p.x, p.y + p.r * 0.2); }
+      ctx.globalAlpha /= 0.9;
     });
   } else if (S.level === 2) {
     ring.positions.forEach((p, t) => {
@@ -548,11 +605,11 @@ function hoverInfo(i: number): string {
   for (let t = 0; t < n; t++) cells.push(cellOf(ov, first + t));
   const ty = tally(cells);
   const nm = S.level === 0 ? `Arena ${i}` : `Sub-arena ${i} of arena ${S.arena}`;
-  return `<b>${nm}</b> \u00b7 ${n} tables \u00b7 ${ty.play} playing \u00b7 ${ty.cashed} cashed out \u00b7 ${ty.fell} fell \u00b7 tap to open`;
+  return `<b>${nm}</b> \u00b7 ${n} tables \u00b7 ${ty.play} placing coins \u00b7 ${ty.wait} waiting \u00b7 ${ty.cashed} cashed out \u00b7 ${ty.fell} fell \u00b7 tap to open`;
 }
 function onStagePointer(ev: PointerEvent): void {
   const i = stageHit(ev);
-  S.hover = i >= 0 ? i : -1;
+  S.hover = i >= 0 ? i : -1; S.dirty = true;
   $('hover').innerHTML = hoverInfo(i);
 }
 function onStageClick(ev: MouseEvent): void {
@@ -623,7 +680,8 @@ function legendHtml(): string {
     <div>${chip(`background:${b}`)} playing: a bigger disc is a taller stack</div>
     <div>${chip(`background:${b};border:3px solid ${T.cashed}`)} cashed out or connected</div>
     <div>${chip(`background:${T.platform};border:3px solid ${T.fell}`)} fell</div>
-    <div>${chip(`background:${T.fell};width:7px;height:7px;margin:0 5.5px`)} small red mark on a sub-arena: at least one fall</div>
+    <div>${chip(`background:${T.platform};border:3px dotted ${b}`)} ring of 10 arcs, one per table. Faint = waiting. Coin colour = placing coins (thicker arc = taller stack). Cashed colour = cashed out. Fell colour = fell</div>
+    <div>${chip(`background:${T.platform};border:2px solid ${T.hub};box-shadow:0 0 6px ${T.hub}`)} bright flash: a coin just landed</div>
     <div>${chip(`background:${T.bot};width:10px;height:10px;margin:0 4px`)} a bot disc</div>
   </div>`;
 }
@@ -651,30 +709,43 @@ function renderRight(rep: TablesReply | null): void {
   if (key === rightKey) return;
   rightKey = key; lastFocusKey = '';
   root.innerHTML = `<h3>${S.level === 0 ? 'ARENA OF ARENAS' : 'ARENA ' + S.arena}</h3>
-    <p style="margin:0 0 10px;color:var(--dim)">${S.level === 0 ? '10 arenas, each with 10 sub-arenas, each with 10 tables: 1,000 tables, every one playing a house bot right now.' : 'Each circle is a sub-arena. The small dots inside are its 10 tables.'} Colours update live.</p>
+    <p style="margin:0 0 10px;color:var(--dim)">${S.level === 0 ? '10 arenas, each with 10 sub-arenas, each with 10 tables: 1,000 tables, every seat held by a house bot. Rounds start at different moments in each minute, so the rings fill up, then settle, then restart.' : 'Each circle is a sub-arena. The small dots inside are its 10 tables.'} Colours update live.</p>
     ${legendHtml()}<p style="margin:12px 0 0;color:var(--dim)">Open the table close-up for the exact stack and a replay check.</p>`;
 }
 
 // ---- main loop -----------------------------------------------------------------------------------
+let ringVisible = true;
+let drawMsAvg = 0, drawCount = 0;
+/** Phones and tablets draw fewer frames per second to save battery. */
+const frameGap = (): number => (window.innerWidth < 760 || window.matchMedia?.('(pointer:coarse)').matches ? 83 : 50);
 function frame(): void {
   try {
-    tickClock();
-    const slot = Math.floor(S.vt / S.slotMs);
-    const needPlans = S.view === 'grid' || S.level >= 2;
-    let rep: TablesReply | null = null;
-    if (needPlans) {
-      loadSlot(slot).catch(() => {});
-      rep = repStore.get(keyOf(slot)) ?? null;
-      if ((S.vt % S.slotMs) > S.slotMs - 12000) loadSlot(slot + 1).catch(() => {});
+    if (!document.hidden) {
+      tickClock();
+      const slot = Math.floor(S.vt / S.slotMs);
+      const needPlans = S.view === 'grid' || S.level >= 2;
+      let rep: TablesReply | null = null;
+      if (needPlans) {
+        loadSlot(slot).catch(() => {});
+        rep = repStore.get(keyOf(slot)) ?? null;
+        if ((S.vt % S.slotMs) > S.slotMs - 12000) loadSlot(slot + 1).catch(() => {});
+      }
+      // draw only what is on screen, and when paused only when something changed
+      const idle = S.paused && !S.dirty && !S.anim;
+      if (S.view === 'grid') { if (rep && !idle) updateGrid(rep); }
+      else if (S.level < 3) {
+        if (ringVisible && !idle) {
+          const t0 = performance.now();
+          drawStage(rep);
+          drawMsAvg += performance.now() - t0; drawCount++;
+          if (drawCount >= 20) { document.documentElement.dataset.drawMs = (drawMsAvg / drawCount).toFixed(1); drawMsAvg = 0; drawCount = 0; }
+        }
+      } else if (!idle) updateClose(rep);
+      S.dirty = false;
+      renderRight(rep);
     }
-    if (S.view === 'grid') { if (rep) updateGrid(rep); }
-    else {
-      if (S.level < 3) drawStage(rep); else updateClose(rep);
-      if (S.level < 3 && !S.anim) { /* hover text stays as the pointer left it */ }
-    }
-    renderRight(rep);
   } catch (e) { console.error(e); }
-  requestAnimationFrame(() => setTimeout(frame, 50));
+  requestAnimationFrame(() => setTimeout(frame, frameGap()));
 }
 
 // ---- summary: stats strip, telemetry, leaderboard ----------------------------------------------
@@ -795,10 +866,10 @@ function toggleColors(show?: boolean): void {
 function showInfo(): void {
   $('modalBox').innerHTML = `<h2>HOW TO READ THIS</h2>
     <p>This is a <b>watch-only demo</b> of the CAPHET Arena. Each mode has 1,000 seats: <b>10 arenas, each with 10 sub-arenas, each with 10 tables</b>. Every seat is always playing a <b>house bot</b> with <b>play coins</b>. Nobody can join, and no wallet or real token is involved.</p>
-    <p><b>Arena of arenas:</b> the top view is the Collection Center Hub with a ring of 10 arenas around it. Tap an arena to see its 10 sub-arenas, tap a sub-arena to see its 10 tables, tap a table for the close-up. The BACK button, the trail at the top, or tapping the hub takes you out again. The TABLE GRID button shows the older ten-card layout.</p>
+    <p><b>Arena of arenas:</b> the top view is the Collection Center Hub with a ring of 10 arenas around it. On the top view every arena shows its 10 sub-arenas, and each sub-arena shows its 10 tables as a ring of 10 arcs that light up as bots place coins, with a disc that grows in the middle. Tap an arena to see its 10 sub-arenas with every table as a live dot, tap a sub-arena to see its 10 tables, tap a table for the close-up. The BACK button, the trail at the top, or tapping the hub takes you out again. The TABLE GRID button shows the older ten-card layout.</p>
     <p>A coin is 63.5 mm wide. Bots slide each new coin sideways. In <b>single</b> the score is how far (mm) the stack reaches out from the first coin. In <b>twin</b> and <b>triple</b> the stacks must touch each other and the score is the tallest stack in coins (capped at the second tallest plus 10). If the stack tips over it <b>falls</b>.</p>
     <p>Coin quality comes from live CAPH trading volume: at $500 or less coins are lopsided and wobbly, at $100,000 or more they are perfect. Use the volume menu to see what better or worse coins look like.</p>
-    <p>Every table close-up is a real engine round. The server sends the seed, the volume and the moves. <b>Your browser replays them with the same engine</b> and checks the result (see "replay check"). The colours of the two outer rings are a quick live picture made from each table's start time and result.</p>
+    <p>Every table close-up is a real engine round. The server sends the seed, the volume and the moves. <b>Your browser replays them with the same engine</b> and checks the result (see "replay check"). The two outer views are a quick live picture made from each table's start time, speed and result, so they are approximate; the table views are exact.</p>
     <p>Use <b>COLORS</b> to change every colour and save it in this browser.</p>
     <p><button onclick="document.getElementById('modal').classList.remove('show')">CLOSE</button></p>`;
   $('modal').classList.add('show');
@@ -815,6 +886,8 @@ function buildFooter(): void {
   ring.addEventListener('pointermove', onStagePointer);
   ring.addEventListener('pointerleave', () => { S.hover = -1; $('hover').innerHTML = ''; });
   ring.addEventListener('click', onStageClick);
+  if (typeof IntersectionObserver !== 'undefined') new IntersectionObserver((es) => { ringVisible = es.some((e) => e.isIntersecting); S.dirty = true; }).observe(ring);
+  window.addEventListener('resize', () => { S.dirty = true; });
 }
 /** A link like /#go=3.5.2 opens arena 3, sub-arena 5, table 2 (handy for sharing and tests). */
 function startFromHash(): void {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hitRing, liveCell, ringPositions, tally } from '../web/geometry.js';
+import { FLASH_MS, arcFor, hitRing, liveCell, ringPositions, spotsFor, tally } from '../web/geometry.js';
 import {
   DEFAULT_THEME, PRESETS, THEME_KEYS, coinBase, coinTone, contrastOn, hexToHsl, hslToHex, mixHex, normHex, sameTheme, sanitizeTheme, themeFromHash, themeToHash,
 } from '../web/theme.js';
@@ -108,6 +108,71 @@ describe('ring layout and live colours', () => {
     const t = tally([liveCell([0, 1, 1, 1, 0, 3], 99), liveCell([0, 1, 1, 2, 9, 9], 99), liveCell([500, 1, 5, 2, 9, 9], 10), liveCell([0, 1000, 5, 2, 9, 9], 2000)]);
     expect(t).toMatchObject({ fell: 1, cashed: 1, wait: 1, play: 1 });
     expect(tally([]).size).toBe(0);
+  });
+});
+
+describe('live action on the top views', () => {
+  const row = [2000, 1000, 10, 2, 40, 30]; // starts at 2 s, one move per second, 10 moves, cashes out with 30 coins
+
+  it('coins grow smoothly: a coin slides in during the first part of each step, then holds', () => {
+    const a = liveCell(row, 5000); // just as move 4 starts
+    const b = liveCell(row, 5125);
+    const c = liveCell(row, 5400);
+    expect(a.sinceMove).toBe(0);
+    expect(b.coinsF).toBeGreaterThan(a.coinsF);
+    expect(c.coinsF).toBeGreaterThan(b.coinsF);
+    expect(liveCell(row, 5900).coinsF).toBeCloseTo(c.coinsF, 5); // holds until the next coin
+    expect(liveCell(row, 6100).coinsF).toBeGreaterThan(c.coinsF);
+    let last = -1;
+    for (let t = 2000; t < 11000; t += 50) { const v = liveCell(row, t).coinsF; expect(v).toBeGreaterThanOrEqual(last); last = v; }
+    expect(last).toBeLessThanOrEqual(30);
+  });
+
+  it('a landing coin and a round ending both flash, then fade', () => {
+    expect(tally([liveCell(row, 5050)]).pulse).toBeGreaterThan(0.7);
+    expect(tally([liveCell(row, 5800)]).pulse).toBe(0);
+    const endAt = 2000 + 9 * 1000; // the last move
+    expect(liveCell(row, endAt + 10).flash).toBeGreaterThan(0.95);
+    expect(liveCell(row, endAt + FLASH_MS / 2).flash).toBeCloseTo(0.5, 1);
+    expect(liveCell(row, endAt + FLASH_MS + 10).flash).toBe(0);
+    expect(liveCell([0, 1000, 5, 1, 0, 9], 4010).phase).toBe('fell');
+    expect(tally([liveCell([0, 1000, 5, 1, 0, 9], 4010)]).flash).toBeGreaterThan(0.9);
+    expect(liveCell(undefined, 10).flash).toBe(0);
+  });
+
+  it('a ring of 10 arcs, one per table, with small gaps and none overlapping', () => {
+    let prevEnd = -Infinity;
+    for (let i = 0; i < 10; i++) {
+      const [a0, a1] = arcFor(i);
+      expect(a1).toBeGreaterThan(a0);
+      expect(a0).toBeGreaterThan(prevEnd);
+      prevEnd = a1;
+    }
+    expect(arcFor(0)[0]).toBeCloseTo(-Math.PI / 2 + 0.05, 1);
+    expect(arcFor(9)[1]).toBeLessThan(-Math.PI / 2 + Math.PI * 2);
+  });
+
+  it('stack spots per table: 1 for single, 2 for twin, 3 for triple, all inside the circle and apart', () => {
+    for (const n of [1, 2, 3]) {
+      const sp = spotsFor(n);
+      expect(sp).toHaveLength(n);
+      for (const p of sp) expect(Math.hypot(p.x, p.y) + p.r).toBeLessThanOrEqual(1.0001);
+      for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) expect(Math.hypot(sp[i]!.x - sp[j]!.x, sp[i]!.y - sp[j]!.y)).toBeGreaterThan(sp[i]!.r + sp[j]!.r - 0.001);
+    }
+  });
+
+  it('at any moment of a minute the 1000 cells give sensible counts (some waiting, some playing, some done)', async () => {
+    const { DemoService } = await import('../src/demo/service.js');
+    const { MemoryStore } = await import('../src/server/store/memory.js');
+    const now = 5000 * 60000;
+    const svc = new DemoService(new MemoryStore(), { get: async () => ({ volumeUsd: 30000, source: 'test', priceUsd: 0, liquidityUsd: 0 }) } as any, () => now);
+    const ov = (await svc.overview('single', null, '30000')) as any;
+    const count = (ms: number) => { const c = { wait: 0, play: 0, done: 0 }; for (const r of ov.seats) { const p = liveCell(r, ms).phase; if (p === 'wait') c.wait++; else if (p === 'play') c.play++; else c.done++; } return c; };
+    const early = count(1000), mid = count(25000), late = count(59000);
+    expect(early.wait).toBeGreaterThan(500);
+    expect(mid.play).toBeGreaterThan(100);
+    expect(late.done).toBe(1000);
+    expect(early.play + early.wait + early.done).toBe(1000);
   });
 });
 
