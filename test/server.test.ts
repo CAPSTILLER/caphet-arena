@@ -58,7 +58,7 @@ describe('docs', () => {
   it('serves an OpenAPI document with every endpoint', async () => {
     const r = await make().call('GET', '/openapi.json');
     expect(r.json.openapi).toMatch(/^3\./);
-    for (const p of ['/join', '/place', '/cashout', '/state/{round}', '/replay/{round}', '/leaderboard', '/events', '/volume', '/chain', '/auth/nonce', '/demo/tables', '/demo/summary', '/demo/round/{id}']) {
+    for (const p of ['/join', '/place', '/cashout', '/state/{round}', '/replay/{round}', '/leaderboard', '/events', '/volume', '/chain', '/auth/nonce', '/demo/tables', '/demo/overview', '/demo/summary', '/demo/round/{id}']) {
       expect(Object.keys(r.json.paths)).toContain(p);
     }
   });

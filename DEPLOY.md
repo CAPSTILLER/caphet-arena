@@ -12,14 +12,16 @@ This puts the watch-only demo online. It needs **no environment variables** and 
    - Build Command, Output Directory, Install Command: leave empty / default
    - Environment Variables: **none needed**
 4. Click **Deploy** and wait for "Congratulations".
-5. Click the preview image or **Visit**. You should see the CAPHET Arena page with 10 tables, coins stacking, a leaderboard on the left and a stats strip on top.
+5. Click the preview image or **Visit**. You should see the CAPHET Arena page: a white stadium circle on black with the Collection Center Hub in the middle and a ring of 10 arenas around it, a leaderboard on the left and a stats strip on top.
 
 That is all. The demo runs on a memory store, which means it works with zero setup.
 
 ## Check it when you wake up
 
-- `/` shows the page. Click SINGLE, TWIN, TRIPLE and the arena and sub-arena numbers. Click a table to zoom. Try the volume menu ("What-if $100,000" gives perfect coins).
-- Try the THEME color picker at the bottom, pause, and the speed buttons.
+- `/` shows the arena of arenas. Tap an arena, then a sub-arena, then a table to see its stack up close. Use BACK, the trail at the top, the Escape key or the hub to come out. TABLE GRID switches to the older ten-card layout. SINGLE, TWIN and TRIPLE change the mode. Try the volume menu ("What-if $100,000" gives perfect coins).
+- Open COLORS at the bottom. Pick a preset or change the background, coins, platforms, outlines, hub, bot discs and more. COPY SHARE LINK gives a link that carries your colours. RESET goes back to black, white and red.
+- A link like `/#go=3.5.2` opens arena 3, sub-arena 5, table 2 directly.
+- Try pause and the speed buttons too.
 - `/health` should show `{"ok":true,...}`.
 - `/llms.txt` has the plain-language rules. `/openapi.json` has the machine spec.
 - The "replay check" line in the zoom panel should say "matches server result". `/replay/<round id>` shows the same round as JSON.

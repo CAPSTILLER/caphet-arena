@@ -6,77 +6,125 @@
 <title>CAPHET Arena (watch-only demo)</title>
 <meta name="description" content="Watch AI house bots stack coins in the CAPHET Arena. Play coins only.">
 <style>
-:root { --bg:#070b16; --panel:#0e1526; --panel2:#121b30; --line:#1d2a47; --teal:#23d5c4; --yellow:#ffd34d; --green:#3ddc84; --red:#ff5a6a; --text:#dbe6ff; --dim:#7b8bb0; }
+:root {
+  --bg:#000000; --text:#f2f2f2; --coin:#e0182d; --ring:#e0182d; --accent:#f5a000; --ok:#f5a000; --bad:#ff3b3b; --botc:#2f6bff; --platform:#ffffff;
+  --panel: color-mix(in srgb, var(--bg) 92%, var(--text) 8%);
+  --panel2: color-mix(in srgb, var(--bg) 84%, var(--text) 16%);
+  --line: color-mix(in srgb, var(--bg) 72%, var(--text) 28%);
+  --dim: color-mix(in srgb, var(--text) 58%, var(--bg) 42%);
+}
 * { box-sizing:border-box; }
 html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font:13px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
 body { display:flex; flex-direction:column; min-height:100vh; }
-button { font:inherit; color:var(--text); background:var(--panel2); border:1px solid var(--line); border-radius:999px; padding:6px 12px; cursor:pointer; letter-spacing:.04em; }
-button:hover { border-color:var(--teal); }
-button.on { border-color:var(--teal); color:var(--yellow); box-shadow:0 0 0 1px var(--teal) inset, 0 0 14px rgba(35,213,196,.25); }
+button { font:inherit; color:var(--text); background:var(--panel2); border:1px solid var(--line); border-radius:999px; padding:6px 12px; cursor:pointer; letter-spacing:.04em; touch-action:manipulation; }
+button:hover { border-color:var(--accent); }
+button.on { border-color:var(--accent); color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+button:disabled { opacity:.35; cursor:default; }
 header { display:flex; flex-wrap:wrap; gap:14px; align-items:center; padding:12px 18px; border-bottom:1px solid var(--line); }
 .logo { font-weight:800; font-size:20px; letter-spacing:.14em; }
-.logo small { display:block; font-size:10px; color:var(--teal); letter-spacing:.3em; }
-.crumb { color:var(--dim); letter-spacing:.08em; text-transform:uppercase; }
+.logo small { display:block; font-size:10px; color:var(--accent); letter-spacing:.3em; }
+.crumb { display:flex; flex-wrap:wrap; gap:6px; align-items:center; color:var(--dim); letter-spacing:.06em; text-transform:uppercase; }
+.crumb button { padding:4px 10px; font-size:12px; text-transform:uppercase; }
 .crumb b { color:var(--text); }
 .spacer { flex:1; }
 .modes button { padding:8px 16px; text-transform:uppercase; }
 .pickers { display:flex; flex-wrap:wrap; gap:18px; align-items:center; padding:10px 18px; border-bottom:1px solid var(--line); }
 .pickers label { color:var(--dim); font-size:11px; letter-spacing:.2em; margin-right:6px; }
-.row { display:flex; gap:4px; align-items:center; }
+.row { display:flex; gap:4px; align-items:center; flex-wrap:wrap; }
 .row button { padding:4px 9px; border-radius:8px; min-width:30px; }
 select { font:inherit; color:var(--text); background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:5px 8px; }
 .strip { display:flex; flex-wrap:wrap; gap:10px; padding:10px 18px; }
 .stat { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:6px 12px; min-width:112px; }
 .stat i { display:block; font-style:normal; color:var(--dim); font-size:10px; letter-spacing:.18em; text-transform:uppercase; }
 .stat b { font-size:17px; }
-.y { color:var(--yellow); } .g { color:var(--green); } .r { color:var(--red); } .t { color:var(--teal); }
-main { display:grid; grid-template-columns:270px minmax(0,1fr) 330px; gap:14px; padding:0 18px 14px; flex:1; }
+.y { color:var(--accent); } .g { color:var(--ok); } .r { color:var(--bad); } .t { color:var(--coin); }
+main { display:grid; grid-template-columns:270px minmax(0,1fr) 330px; gap:14px; padding:0 18px 14px; flex:1; align-items:start; }
 @media (max-width:1250px) { main { grid-template-columns:240px minmax(0,1fr); } #focus { grid-column:1 / -1; } }
-@media (max-width:760px) { main { grid-template-columns:1fr; } }
+@media (max-width:760px) { .banner { display:none; } .strip { flex-wrap:nowrap; overflow-x:auto; gap:6px; } .stat { min-width:92px; padding:4px 8px; } .stat b { font-size:14px; } header { gap:8px; padding-top:8px; padding-bottom:8px; } .logo { font-size:16px; } .pickers { gap:8px; padding-top:6px; padding-bottom:6px; } .modes button { padding:6px 10px; } footer { padding:8px 10px; gap:6px; } footer .note { display:none; } main { grid-template-columns:1fr; padding:0 8px 14px; } #center { order:-1; } header, .pickers, .strip { padding-left:10px; padding-right:10px; } }
 .panel { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px 14px; }
 .panel h3 { margin:0 0 8px; font-size:11px; color:var(--dim); letter-spacing:.24em; font-weight:600; }
 .kv { display:flex; justify-content:space-between; padding:2px 0; gap:10px; }
 .kv span:first-child { color:var(--dim); }
 .bar { height:8px; background:var(--line); border-radius:6px; overflow:hidden; margin:6px 0 8px; }
-.bar div { height:100%; background:linear-gradient(90deg,var(--red),var(--yellow),var(--green)); }
+.bar div { height:100%; background:linear-gradient(90deg,var(--bad),var(--accent),var(--ok)); }
 #lb { list-style:none; margin:0; padding:0; max-height:360px; overflow:auto; }
 #lb li { display:flex; gap:8px; padding:4px 6px; border-radius:8px; cursor:pointer; align-items:center; }
 #lb li:hover { background:var(--panel2); }
 #lb li .n { color:var(--dim); width:20px; text-align:right; }
 #lb li .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#lb li .sc { color:var(--yellow); font-weight:700; }
-.tag { font-size:9px; border:1px solid var(--teal); color:var(--teal); border-radius:6px; padding:0 4px; letter-spacing:.1em; }
-#grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; align-content:start; }
+#lb li .sc { color:var(--accent); font-weight:700; }
+.dot { display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--botc); flex:none; }
+.tag { font-size:9px; border:1px solid var(--accent); color:var(--accent); border-radius:6px; padding:0 4px; letter-spacing:.1em; }
+/* the arena of arenas */
+#center { min-width:0; }
+#ringWrap { width:min(100%, calc(100vh - 250px)); min-width:min(100%, 300px); margin:0 auto; }
+#ring { width:100%; aspect-ratio:1; display:block; touch-action:manipulation; cursor:pointer; }
+#hover { min-height:38px; text-align:center; color:var(--dim); padding:6px 4px 0; }
+#hover b { color:var(--text); }
+#hint { text-align:center; color:var(--dim); font-size:12px; padding:2px 8px; }
+#close { display:none; }
+#closeHead { display:flex; flex-wrap:wrap; align-items:center; gap:10px; padding:2px 2px 8px; }
+#closeHead .nm { font-size:18px; font-weight:800; }
+#closeHead .sp { flex:1; }
+#closeCv { display:grid; grid-template-columns:minmax(0,1fr) minmax(0,1fr); gap:12px; }
+@media (max-width:760px) { #closeCv { grid-template-columns:1fr; } }
+#closeCv canvas { width:100%; display:block; border-radius:14px; }
+#cOv { aspect-ratio:1; }
+#cSd { aspect-ratio:1 / 1.12; }
+#grid { display:none; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; align-content:start; }
 @media (max-width:1100px) { #grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
 @media (max-width:560px) { #grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+body.grid #grid { display:grid; } body.grid #ringWrap, body.grid #hint, body.grid #close { display:none !important; }
+body.close #close { display:block; } body.close #ringWrap, body.close #hover { display:none; }
 .card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:8px; cursor:pointer; position:relative; }
-.card:hover { border-color:var(--teal); }
-.card.sel { border-color:var(--yellow); box-shadow:0 0 18px rgba(255,211,77,.22); }
+.card:hover { border-color:var(--accent); }
+.card.sel { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
 .card .top { display:flex; justify-content:space-between; gap:6px; font-size:11px; color:var(--dim); }
 .card .top b { color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .card canvas { width:100%; aspect-ratio:1; display:block; border-radius:10px; margin:6px 0; }
 .card .bot { display:flex; justify-content:space-between; align-items:center; }
-.badge { font-size:10px; letter-spacing:.14em; padding:2px 7px; border-radius:6px; border:1px solid var(--line); color:var(--dim); }
-.badge.play { color:var(--teal); border-color:var(--teal); }
-.badge.fell { color:var(--red); border-color:var(--red); background:rgba(255,90,106,.1); }
-.badge.cashed { color:var(--green); border-color:var(--green); background:rgba(61,220,132,.1); }
-.badge.touched { color:var(--teal); border-color:var(--teal); background:rgba(35,213,196,.12); }
-.score { font-weight:800; font-size:16px; color:var(--yellow); }
-#focus canvas { width:100%; display:block; border-radius:10px; margin:8px 0; background:rgba(255,255,255,.03); }
+.badge { font-size:10px; letter-spacing:.14em; padding:2px 7px; border-radius:6px; border:1px solid var(--line); color:var(--dim); white-space:nowrap; }
+.badge.play { color:var(--coin); border-color:var(--coin); }
+.badge.fell { color:var(--bad); border-color:var(--bad); }
+.badge.cashed { color:var(--ok); border-color:var(--ok); }
+.badge.touched { color:var(--accent); border-color:var(--accent); }
+.score { font-weight:800; font-size:16px; color:var(--accent); }
+#focus canvas { width:100%; display:block; border-radius:10px; margin:8px 0; }
 #focus .ov { aspect-ratio:1; }
-#focus .sd { height:210px; }
-code { color:var(--teal); word-break:break-all; font-size:11px; }
-footer { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:10px 18px; border-top:1px solid var(--line); background:#050810; position:sticky; bottom:0; }
+#focus .sd { aspect-ratio:1 / 1.05; }
+code { color:var(--accent); word-break:break-all; font-size:11px; }
+.legend { display:grid; gap:6px; }
+.legend div { display:flex; gap:8px; align-items:center; }
+.legend canvas { width:22px; height:22px; flex:none; }
+.tlist { list-style:none; margin:0; padding:0; }
+.tlist li { display:flex; gap:8px; align-items:center; padding:5px 6px; border-radius:8px; cursor:pointer; }
+.tlist li:hover { background:var(--panel2); }
+.tlist .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+footer { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:10px 18px; border-top:1px solid var(--line); background:var(--bg); position:sticky; bottom:0; z-index:5; }
 footer .grp { display:flex; gap:6px; align-items:center; }
 footer .note { color:var(--dim); font-size:11px; margin-left:auto; }
-.swatch { width:22px; height:22px; border-radius:50%; border:1px solid var(--line); padding:0; }
 input[type=color] { width:34px; height:28px; border:1px solid var(--line); background:var(--panel2); border-radius:8px; padding:2px; cursor:pointer; }
 #modal { position:fixed; inset:0; background:rgba(0,0,0,.65); display:none; align-items:center; justify-content:center; z-index:10; padding:20px; }
 #modal.show { display:flex; }
-#modal .box { max-width:640px; background:var(--panel); border:1px solid var(--teal); border-radius:16px; padding:20px 24px; line-height:1.55; max-height:90vh; overflow:auto; }
+#modal .box { max-width:640px; background:var(--panel); color:var(--text); border:1px solid var(--accent); border-radius:16px; padding:20px 24px; line-height:1.55; max-height:90vh; overflow:auto; }
 #modal h2 { margin-top:0; letter-spacing:.12em; }
-.banner { background:linear-gradient(90deg,rgba(35,213,196,.14),transparent); border-left:3px solid var(--teal); padding:6px 12px; margin:0 18px 8px; color:var(--dim); border-radius:6px; }
-.banner b { color:var(--teal); }
+.banner { border-left:3px solid var(--accent); padding:6px 12px; margin:0 18px 8px; color:var(--dim); border-radius:6px; background:var(--panel); }
+.banner b { color:var(--accent); }
+/* colour panel */
+#colors { position:fixed; right:12px; bottom:64px; width:340px; max-width:calc(100vw - 24px); max-height:calc(100vh - 150px); overflow:auto; background:var(--panel); color:var(--text); border:1px solid var(--accent); border-radius:16px; padding:14px 16px; z-index:8; display:none; box-shadow:0 10px 40px rgba(0,0,0,.6); }
+#colors.show { display:block; }
+@media (max-width:760px) { #colors { right:6px; left:6px; width:auto; max-width:none; bottom:60px; max-height:62vh; } }
+#colors h3 { margin:0 0 8px; letter-spacing:.2em; font-size:12px; display:flex; justify-content:space-between; align-items:center; }
+#colors .sec { color:var(--dim); font-size:10px; letter-spacing:.2em; margin:12px 0 6px; }
+#presets { display:flex; flex-wrap:wrap; gap:6px; }
+#presets button { display:flex; gap:6px; align-items:center; border-radius:10px; padding:4px 8px; font-size:11px; }
+#presets i { display:inline-flex; } #presets i b { width:10px; height:14px; display:block; }
+.crow { display:flex; align-items:center; justify-content:space-between; gap:10px; padding:3px 0; }
+.crow label { flex:1; }
+.crow small { display:block; color:var(--dim); font-size:10px; }
+.crow input[type=text] { width:78px; font:inherit; color:var(--text); background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:3px 5px; }
+#colors .btns { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
+#shareMsg { color:var(--dim); font-size:11px; margin-top:6px; word-break:break-all; }
 </style>
 </head>
 <body>
@@ -86,10 +134,10 @@ input[type=color] { width:34px; height:28px; border:1px solid var(--line); backg
   <div class="spacer"></div>
   <div class="modes" id="modes"></div>
 </header>
-<div class="banner"><b>Demo.</b> Every table below is always playing a house bot with play coins. No wallet, no real tokens, nobody can join. Each round is a real engine round that your browser replays itself.</div>
+<div class="banner"><b>Demo.</b> Every table is always playing a house bot with play coins. No wallet, no real tokens, nobody can join. Each round is a real engine round that your browser replays itself.</div>
 <div class="pickers">
-  <div class="row"><label>ARENA</label><span id="arenas" class="row"></span></div>
-  <div class="row"><label>SUB-ARENA</label><span id="subs" class="row"></span></div>
+  <div class="row"><label>VIEW</label><span id="views" class="row"></span></div>
+  <div class="row" id="gridPick" style="display:none"><label>ARENA</label><span id="arenas" class="row"></span><label>SUB-ARENA</label><span id="subs" class="row"></span></div>
   <div class="row"><label>COIN VOLUME</label><select id="vol"></select></div>
 </div>
 <div class="strip" id="strip"></div>
@@ -98,15 +146,25 @@ input[type=color] { width:34px; height:28px; border:1px solid var(--line); backg
     <div class="panel" id="tele"><h3>TELEMETRY</h3><div id="teleBody"></div></div>
     <div class="panel" style="margin-top:12px"><h3>LEADERBOARD <span class="tag">HOUSE</span></h3><ol id="lb"></ol></div>
   </section>
-  <section id="grid"></section>
+  <section id="center">
+    <div id="ringWrap"><canvas id="ring" aria-label="Arena of arenas. Tap a circle to go in."></canvas></div>
+    <div id="hover"></div>
+    <div id="hint"></div>
+    <div id="close">
+      <div id="closeHead"></div>
+      <div id="closeCv"><canvas id="cOv"></canvas><canvas id="cSd"></canvas></div>
+    </div>
+    <div id="grid"></div>
+  </section>
   <section class="panel" id="focus"></section>
 </main>
+<div id="colors" role="dialog" aria-label="Colours"></div>
 <footer>
-  <div class="grp"><button id="follow">&#9678; FOLLOW LEADER</button></div>
+  <div class="grp"><button id="back">&#8592; BACK</button><button id="follow">&#9678; FOLLOW LEADER</button></div>
   <div class="grp"><button id="pause" title="pause or resume">&#10073;&#10073;</button><span id="speeds" class="grp"></span></div>
-  <div class="grp"><span style="color:var(--dim)">THEME</span><input type="color" id="bg" value="#070b16" title="background colour"><span id="swatches" class="grp"></span></div>
+  <div class="grp"><button id="colorBtn">COLORS</button></div>
   <div class="grp"><button id="info">i</button></div>
-  <div class="note">Play coins only &middot; house bots &middot; click a table to zoom</div>
+  <div class="note" id="note">Play coins only &middot; house bots &middot; tap a circle to go in</div>
 </footer>
 <div id="modal"><div class="box" id="modalBox"></div></div>
 <script src="/demo.js"></script>

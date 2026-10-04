@@ -214,6 +214,40 @@ describe('DEMO_MODE: watch-only for outside users', () => {
   });
 });
 
+describe('/demo/overview (colours for the ring of arenas)', () => {
+  it('lists all 1000 seats and agrees with the full table plans', async () => {
+    const s = make();
+    const o = await s.get('/demo/overview?mode=twin');
+    expect(o.status).toBe(200);
+    expect(o.json.seats).toHaveLength(1000);
+    expect(o.json.slot).toBe(5000);
+    const t = await s.get('/demo/tables?mode=twin&arena=7&sub=2');
+    t.json.tables.forEach((plan: any, i: number) => {
+      const row = o.json.seats[plan.seat.index];
+      expect(plan.seat.index).toBe(720 + i);
+      expect(row[0]).toBe(plan.startDelayMs);
+      expect(row[1]).toBe(plan.stepMs);
+      expect(row[2]).toBe(plan.moves.length);
+      expect(row[4]).toBe(plan.result.score);
+      expect(row[5]).toBe(plan.result.coinsOnTable);
+      expect([1, 2, 3]).toContain(row[3]);
+      expect(row[3] === 1).toBe(plan.result.status === 'fell');
+    });
+  });
+
+  it('checks its inputs and works for every mode', async () => {
+    const s = make();
+    for (const q of ['mode=huge', 'slot=1', 'slot=99999999', 'vol=7']) expect((await s.get('/demo/overview?' + q)).status, q).toBe(400);
+    for (const m of ['single', 'twin', 'triple']) expect((await s.get('/demo/overview?mode=' + m + '&vol=5000')).json.seats).toHaveLength(1000);
+  });
+
+  it('is cacheable for what-if volumes only', async () => {
+    const s = make();
+    expect((await s.get('/demo/overview?vol=5000')).headers.get('cache-control')).toContain('s-maxage');
+    expect((await s.get('/demo/overview?vol=live')).headers.get('cache-control') ?? '').not.toContain('s-maxage');
+  });
+});
+
 describe('the page', () => {
   it('serves the viewer at / for browsers and JSON for everything else', async () => {
     const s = make();

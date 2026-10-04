@@ -20,7 +20,7 @@ export function llmsTxt(cfg: ServerConfig, baseUrl: string): string {
 Play coins only for now (no real tokens). Finished rounds can be recorded onchain (GET /chain says if that is on; GET /replay/<id> shows the record status). You stack ${COIN_DIAMETER_MM} mm coins on a table by sending sideways offsets.
 Everything is plain HTTP + JSON. Base URL: ${baseUrl}
 Machine readable spec: ${baseUrl}/openapi.json
-${cfg.demoMode ? `\nNOTE: this server is running in WATCH-ONLY DEMO mode (DEMO_MODE=on). POST /join, /place, /cashout and /auth/nonce answer 403 demo_mode for outside users.\nThe viewer at ${baseUrl}/ shows house bots playing every seat. GET /demo/config, /demo/tables, /demo/summary and /demo/round/<id> are open. The rules below describe the real game API that switches on when DEMO_MODE=off.\n` : ''}
+${cfg.demoMode ? `\nNOTE: this server is running in WATCH-ONLY DEMO mode (DEMO_MODE=on). POST /join, /place, /cashout and /auth/nonce answer 403 demo_mode for outside users.\nThe viewer at ${baseUrl}/ shows house bots playing every seat. GET /demo/config, /demo/tables, /demo/overview, /demo/summary and /demo/round/<id> are open. The rules below describe the real game API that switches on when DEMO_MODE=off.\n` : ''}
 ## Quick start
 0. Wallet login (only when this server says authMode is "signature", see the Login section). Skip it in open mode.
 1. POST /join  {"wallet":"0x<40 hex>","mode":"single","botName":"MyBot"}   (signature mode adds "auth":{"nonce":"...","signature":"0x..."})
@@ -177,6 +177,7 @@ export function openApi(baseUrl: string, authMode: 'open' | 'signature' = 'open'
           responses: { '200': ok({ type: 'object' }), '400': err },
         },
       },
+      '/demo/overview': { get: { summary: 'Watch-only demo: compact start time, speed and end result of all 1000 seats for one minute (used to colour the ring of arenas)', parameters: [{ name: 'mode', in: 'query', schema: { type: 'string', enum: modeEnum } }, { name: 'slot', in: 'query', schema: { type: 'integer' } }, { name: 'vol', in: 'query', schema: { type: 'string' } }], responses: { '200': ok({ type: 'object' }), '400': err } } },
       '/demo/summary': { get: { summary: 'Watch-only demo: totals and leaderboard of the house bots for a mode (counted once per minute, on request)', parameters: [{ name: 'mode', in: 'query', schema: { type: 'string', enum: modeEnum } }, { name: 'vol', in: 'query', schema: { type: 'string' } }], responses: { '200': ok({ type: 'object' }), '400': err } } },
       '/demo/round/{id}': { get: { summary: 'One demo round by id (d-<mode>-<seat>-<minute>-<volume>) with seed, moves and a verified flag. Also served at /replay/{id}.', parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }], responses: { '200': ok({ type: 'object' }), '404': err } } },
       '/stats': { get: { summary: 'Seat usage and vault totals (play coins)', responses: { '200': ok({ type: 'object' }) } } },

@@ -177,6 +177,14 @@ export function createApp(deps: AppDeps = {}): { app: Hono; service: GameService
       { 'cache-control': 'public, max-age=30' },
     );
   });
+  app.get('/demo/overview', async (c) => {
+    readLimit(c);
+    const slotQ = c.req.query('slot');
+    const vol = c.req.query('vol') ?? 'live';
+    const body = await demo.overview(parseMode(c.req.query('mode')), slotQ === undefined ? null : intIn(slotQ, 'slot', 0, 1e9, 0), vol);
+    if (vol !== 'live') c.header('cache-control', 'public, max-age=20, s-maxage=60, stale-while-revalidate=60');
+    return c.json(body);
+  });
   app.get('/demo/summary', async (c) => {
     readLimit(c);
     return c.json(await demo.summary(parseMode(c.req.query('mode')), c.req.query('vol') ?? 'live'));

@@ -127,6 +127,37 @@ export class DemoService {
     };
   }
 
+  private overviewMemo = new Map<string, Record<string, unknown>>();
+
+  /**
+   * A compact picture of all 1000 seats for one minute: when each table starts, how fast it plays, and how it ends.
+   * The page uses this to colour the ring of arenas and sub-arenas. Table close-ups still come from /demo/tables and
+   * are replayed exactly by the browser; this list is only for the overview colours.
+   * Per seat: [startDelayMs, stepMs, moves, end, score, coinsOnTable] where end is 1 fell, 2 cashed out, 3 stacks connected.
+   */
+  async overview(mode: Mode, slot: number | null, vol: string): Promise<Record<string, unknown>> {
+    const cur = this.currentSlot();
+    const s = slot ?? cur;
+    if (!Number.isInteger(s) || s < cur - MAX_PAST_SLOTS || s > cur + MAX_FUTURE_SLOTS) {
+      throw new ApiError(400, 'bad_slot', `slot must be between ${cur - MAX_PAST_SLOTS} and ${cur + MAX_FUTURE_SLOTS} (now is ${cur}).`);
+    }
+    const v = await this.resolveVolume(vol);
+    const memoKey = `${mode}|${s}|${v.volumeUsd}`;
+    let body = this.overviewMemo.get(memoKey);
+    if (!body) {
+      const seats: number[][] = [];
+      for (let seat = 0; seat < SEATS_PER_MODE; seat++) {
+        const p = planFromId(demoRoundId(mode, seat, s, v.volumeUsd))!;
+        const end = p.result.status === 'fell' ? 1 : p.result.status === 'touched' ? 3 : 2;
+        seats.push([p.startDelayMs, p.stepMs, p.moves.length, end, p.result.score, p.result.coinsOnTable]);
+      }
+      body = { mode, slot: s, slotStartMs: s * SLOT_MS, slotMs: SLOT_MS, volumeUsd: v.volumeUsd, quality: qualityFromVolume(v.volumeUsd), volumeSource: v.source, seats };
+      this.overviewMemo.set(memoKey, body);
+      if (this.overviewMemo.size > 6) this.overviewMemo.delete(this.overviewMemo.keys().next().value!);
+    }
+    return { ...body, serverNow: this.now() };
+  }
+
   /** One round by id, with proof that it replays to the stated result. */
   roundView(id: string): Record<string, unknown> {
     const p = parseDemoId(id);
