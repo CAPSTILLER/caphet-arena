@@ -22,6 +22,52 @@ export function ringPositions(cx: number, cy: number, maxRadius: number, count =
 /** The hub circle that sits in the middle and touches the inside of every circle of the ring. */
 export function hubRadius(ring: Ring): number { return ring.ringRadius - ring.circleRadius; }
 
+export interface HubLayout {
+  /** The slots exactly as ringPositions gives them. Everything drawn inside a slot (nested rings, tables, labels) uses these circles, so contents never change size. */
+  ring: Ring;
+  /** Hub radius for this volume setting. */
+  hubR: number;
+  /** The "petal" behind each slot: a circle of radius petalR centred petalDist from the middle, cut by the straight lines halfway to the neighbours. */
+  petalR: number;
+  petalDist: number;
+  /** The petal also includes the whole pie slice (between the straight lines) out to this distance from the middle, so no gap is left around the hub. Equal to hubR at the biggest hub, petalDist at the smallest. */
+  sectorR: number;
+  cx: number; cy: number;
+  /** Radius of the outer edge of the petals (the same as the outer edge of the ring slots). */
+  outerR: number;
+}
+
+/**
+ * Layout for a hub that shrinks with coin volume. t is 0 to 1 (0: the hub is as big as the tight ring allows, 1: the hub is about the size of one slot circle).
+ * Ten equal circles cannot grow and stay both tight to a smaller hub and apart from each other inside the same outer edge, so each slot's
+ * backdrop becomes a petal: a bigger circle that touches the hub, cut by straight lines halfway to its neighbours (so petals touch and never overlap).
+ * At t = 0 the petal is exactly today's circle. The slot circle itself (ring) never changes.
+ */
+export function hubLayout(cx: number, cy: number, maxRadius: number, t: number, count = 10): HubLayout {
+  const ring = ringPositions(cx, cy, maxRadius, count);
+  const k = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 0));
+  const hub0 = hubRadius(ring);
+  const outerR = ring.ringRadius + ring.circleRadius;
+  const hubR = hub0 + (ring.circleRadius - hub0) * k;
+  const petalR = (outerR - hubR) / 2;
+  const petalDist = hubR + petalR;
+  return { ring, hubR, petalR, petalDist, sectorR: hubR + k * (petalDist - hubR), cx, cy, outerR };
+}
+
+/** Which slot is under the point of a hub layout: -2 for the hub, -1 for nothing, else the slot. */
+export function hitLayout(l: HubLayout, x: number, y: number): number {
+  const dx = x - l.cx, dy = y - l.cy;
+  const d = Math.hypot(dx, dy);
+  if (d < l.hubR) return -2;
+  const n = l.ring.positions.length;
+  const a = Math.atan2(dy, dx) + Math.PI / 2; // 0 at 12 o'clock
+  const i = (((Math.round((a / (Math.PI * 2)) * n) % n) + n) % n);
+  const ang = l.ring.positions[i]!.angle;
+  const px = l.cx + Math.cos(ang) * l.petalDist, py = l.cy + Math.sin(ang) * l.petalDist;
+  if (d <= l.sectorR) return i;
+  return Math.hypot(x - px, y - py) <= l.petalR ? i : -1;
+}
+
 /** Which slot is under the point, or -1. */
 export function hitRing(ring: Ring, x: number, y: number): number {
   for (let i = 0; i < ring.positions.length; i++) {

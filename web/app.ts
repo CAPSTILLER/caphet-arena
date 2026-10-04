@@ -1,10 +1,11 @@
 // Browser side of the watch-only demo. Bundled with the real engine so the browser replays every round itself.
 import { cashOut, createRound, placeCoin } from '../src/engine.js';
 import type { Mode, Move, RoundState } from '../src/types.js';
-import { type Cell, arcFor, hitRing, hubRadius, liveCell, ringPositions, spotsFor, tally } from './geometry.js';
+import { qualityFromVolume } from '../src/quality.js';
+import { type Cell, type HubLayout, arcFor, hitLayout, hubLayout, liveCell, ringPositions, spotsFor, tally } from './geometry.js';
 import { textFlagFromHash, textFlagFromStore, withHashParam } from './prefs.js';
 import {
-  DEFAULT_THEME, PRESETS, migrateTheme, type Theme, type ThemeColorKey, THEME_KEYS, coinBase, coinTone, contrastOn, mixHex, normHex, rgba, sameTheme, sanitizeTheme, themeFromHash, themeToHash,
+  DEFAULT_THEME, PRESETS, migrateTheme, type Theme, type ThemeColorKey, THEME_KEYS, coinBase, coinTone, contrastOn, mixHex, normHex, randomTheme, rgba, sameTheme, sanitizeTheme, themeFromHash, themeToHash,
 } from './theme.js';
 
 type Plan = {
@@ -29,7 +30,7 @@ const S = {
   mode: 'single' as Mode, arena: 0, sub: 0, vol: 'live', table: 0,
   view: 'rings' as 'rings' | 'grid', level: 0, hover: -1,
   anim: null as null | { t0: number; dir: number }, dirty: true,
-  text: true, speed: 1, paused: false, vt: 0, lastReal: 0, clockOffset: 0, serverSlot: 0, slotMs: 60000,
+  text: true, hubT: -1, hubStamp: 0, speed: 1, paused: false, vt: 0, lastReal: 0, clockOffset: 0, serverSlot: 0, slotMs: 60000,
   config: null as any, summary: null as Summary | null,
 };
 
@@ -255,9 +256,9 @@ function drawStanding(cv: HTMLCanvasElement, st: RoundState, quality: number): v
   ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
   // platform: slab, top, rings
   const ex = Rp * s, ey = Rp * TILT * s;
-  const edge = mixHex(T.platform, '#000000', 0.25);
+  const edge = mixHex(T.subarena, '#000000', 0.25);
   ctx.beginPath(); ctx.ellipse(px, py + slab, ex, ey, 0, 0, Math.PI * 2); ctx.fillStyle = edge; ctx.fill();
-  ctx.beginPath(); ctx.moveTo(px - ex, py); ctx.lineTo(px - ex, py + slab); ctx.ellipse(px, py + slab, ex, ey, 0, Math.PI, 0, true); ctx.lineTo(px + ex, py); ctx.closePath(); ctx.fillStyle = T.platform; ctx.fill();
+  ctx.beginPath(); ctx.moveTo(px - ex, py); ctx.lineTo(px - ex, py + slab); ctx.ellipse(px, py + slab, ex, ey, 0, Math.PI, 0, true); ctx.lineTo(px + ex, py); ctx.closePath(); ctx.fillStyle = T.subarena; ctx.fill();
   ctx.strokeStyle = T.ring; ctx.lineWidth = Math.max(1, W / 360); ctx.stroke();
   ctx.beginPath(); ctx.ellipse(px, py, ex, ey, 0, 0, Math.PI * 2);
   const tg = ctx.createRadialGradient(px, py - ey * 0.3, 0, px, py, ex);
@@ -432,8 +433,34 @@ function hubDraw(ctx: CanvasRenderingContext2D, cx: number, cy: number, hubR: nu
   ctx.fillText('COLLECTION', cx, cy - lh * 1.2); ctx.fillText('CENTER', cx, cy - lh * 0.2); ctx.fillText('HUB', cx, cy + lh * 0.8);
   if (line) { ctx.font = `${Math.max(6, hubR * 0.13)}px ui-monospace,monospace`; ctx.globalAlpha *= 0.85; ctx.fillText(line, cx, cy + lh * 1.75); ctx.globalAlpha /= 0.85; }
 }
-function node(ctx: CanvasRenderingContext2D, p: { x: number; y: number; r: number }, lw: number, stroke: string, hot: boolean, fill = T.platform): void {
-  banded(ctx, p.x, p.y, p.r, fill, hot ? T.hub : stroke, hot ? lw * 1.8 : lw);
+/** The current hub layout (set at the start of every stage draw). Slot circles stay the size they always were; the petal behind each one grows as the hub shrinks. */
+let LAY: HubLayout | null = null;
+/** A slot's backdrop: a circle (the petal) cut by the straight lines halfway to its neighbours, with a solid band inside its edge. At the biggest hub it is exactly the plain circle. */
+function node(ctx: CanvasRenderingContext2D, i: number, lw: number, stroke: string, hot: boolean, fill: string): void {
+  const L = LAY!;
+  const ang = L.ring.positions[i]!.angle;
+  const px = L.cx + Math.cos(ang) * L.petalDist, py = L.cy + Math.sin(ang) * L.petalDist;
+  const bw = Math.min(hot ? lw * 1.8 : lw, L.petalR * 0.45);
+  const band = hot ? T.hub : stroke;
+  const half = Math.PI / L.ring.positions.length;
+  const wedge = (shift: number): void => {
+    // apex moved out along the middle line by shift / sin(half) so every side line moves in by `shift`
+    const ax = L.cx + Math.cos(ang) * (shift / Math.sin(half)), ay = L.cy + Math.sin(ang) * (shift / Math.sin(half));
+    const len = L.outerR * 1.5 / Math.cos(half);
+    ctx.beginPath(); ctx.moveTo(ax, ay);
+    ctx.lineTo(ax + Math.cos(ang - half) * len, ay + Math.sin(ang - half) * len);
+    ctx.lineTo(ax + Math.cos(ang + half) * len, ay + Math.sin(ang + half) * len);
+    ctx.closePath(); ctx.clip();
+  };
+  // the petal is its circle plus the pie slice next to the hub (so the hub is wrapped with no gap when it is small)
+  const shape = (inset: number): void => {
+    ctx.beginPath();
+    ctx.arc(px, py, Math.max(0, L.petalR - inset), 0, Math.PI * 2);
+    ctx.moveTo(L.cx + L.sectorR, L.cy); ctx.arc(L.cx, L.cy, L.sectorR, 0, Math.PI * 2);
+  };
+  ctx.save(); wedge(0); shape(0); ctx.fillStyle = band; ctx.fill(); ctx.restore();
+  // neighbours each take half the band along the shared straight sides, so those sides end up one band wide in total
+  ctx.save(); wedge(bw / 2); shape(bw); ctx.fillStyle = fill; ctx.fill(); ctx.restore();
 }
 /** One table as a small circle with its live stack spots (1 for single, 2 for twin, 3 for triple). */
 function tableDot(ctx: CanvasRenderingContext2D, q: { x: number; y: number; r: number }, c: Cell, seat: number, base: string): void {
@@ -464,6 +491,26 @@ function currentOverview(): Overview | null {
 }
 const cellOf = (ov: Overview | null, seat: number): Cell => liveCell(ov?.seats[seat], ov ? S.vt - ov.slotStartMs : -1);
 
+/** The coin volume that sets the hub size: the what-if choice, else the live CAPH volume. */
+function hubVolume(ov: Overview | null): number {
+  if (S.vol !== 'live') return Number(S.vol) || 0;
+  const live = S.summary?.liveVolumeUsd ?? S.summary?.volumeUsd ?? ov?.volumeUsd;
+  return Number.isFinite(live) ? Number(live) : 0;
+}
+/** Move the shown hub size toward the size for this volume (same log scale as coin quality), easing over about half a second. */
+function stepHub(target: number): number {
+  const now = performance.now();
+  const dt = S.hubStamp ? Math.min(250, now - S.hubStamp) : 0;
+  S.hubStamp = now;
+  if (S.hubT < 0) S.hubT = target;
+  else {
+    const d = target - S.hubT;
+    if (Math.abs(d) < 0.0008) S.hubT = target;
+    else { S.hubT += d * (1 - Math.exp(-dt / 220)); S.dirty = true; }
+  }
+  document.documentElement.dataset.hubT = S.hubT.toFixed(3);
+  return S.hubT;
+}
 function stageGeom(w: number): { cx: number; cy: number; maxR: number } { return { cx: w / 2, cy: w / 2, maxR: w * 0.465 }; }
 let hoverText = '';
 function drawStage(rep: TablesReply | null): void {
@@ -486,12 +533,13 @@ function drawStage(rep: TablesReply | null): void {
   }
   // the big stadium circle
   const lw = Math.max(1.5, w * 0.005);
-  banded(ctx, cx, cy, maxR * 1.012, T.platform, T.ring, lw * 1.6);
-  const ring = ringPositions(cx, cy, maxR, 10);
+  banded(ctx, cx, cy, maxR * 1.012, S.level === 0 ? T.platform : S.level === 1 ? T.arena : T.subarena, T.ring, lw * 1.6);
+  const lay = hubLayout(cx, cy, maxR, stepHub(qualityFromVolume(hubVolume(ov))));
+  LAY = lay;
+  const ring = lay.ring;
   let hubLine = '';
   if (S.text && ov && S.level <= 1) { let playing = 0; for (let i = 0; i < 1000; i++) if (cellOf(ov, i).phase === 'play') playing++; hubLine = `${playing} playing \u00b7 next in ${Math.max(0, Math.ceil((S.slotMs - (S.vt % S.slotMs)) / 1000))}s`; }
-  hubDraw(ctx, cx, cy, hubRadius(ring), hubLine);
-  const labelCol = contrastOn(T.platform);
+  const labelCol = contrastOn(S.level === 0 ? T.arena : T.subarena);
   const sec = S.vt - (ov?.slotStartMs ?? 0);
   void sec;
   if (S.level === 0) {
@@ -503,7 +551,7 @@ function drawStage(rep: TablesReply | null): void {
     const live: { x: number; y: number; r: number; ty: ReturnType<typeof tally> }[] = [];
     const arenaPlaying: number[] = [];
     ring.positions.forEach((p, a) => {
-      node(ctx, p, lw, T.ring, S.hover === a);
+      node(ctx, a, lw, T.ring, S.hover === a, T.arena);
       const inner = ringPositions(p.x, p.y, p.r - lw, 10);
       let playing = 0;
       inner.positions.forEach((q, sb) => {
@@ -513,10 +561,12 @@ function drawStage(rep: TablesReply | null): void {
         playing += ty.play;
         // sub-arena dot: platform, then a growing disc and a pulse when a coin lands
         const bq = Math.max(0.7, q.r * 0.09);
-        banded(ctx, q.x, q.y, q.r, T.table, T.ring, bq);
+        banded(ctx, q.x, q.y, q.r, T.subarena, T.ring, bq);
         if (ty.flash > 0.02 && (ty.fell || ty.cashed)) { disc(ctx, q.x, q.y, q.r - bq); ctx.fillStyle = rgba(ty.fell ? T.fell : T.cashed, 0.5 * ty.flash); ctx.fill(); }
+        // the tables' track: a ring in the table colour that the 10 table arcs sit on
+        ctx.beginPath(); ctx.arc(q.x, q.y, q.r * 0.74, 0, Math.PI * 2); ctx.lineWidth = lwSeg * 1.5; ctx.strokeStyle = T.table; ctx.stroke();
         const rd = q.r * (0.14 + 0.36 * ty.size) * (1 + 0.18 * ty.pulse);
-        disc(ctx, q.x, q.y, rd); ctx.fillStyle = mixHex(T.table, base, Math.min(1, 0.35 + ty.size)); ctx.fill();
+        disc(ctx, q.x, q.y, rd); ctx.fillStyle = mixHex(T.subarena, base, Math.min(1, 0.35 + ty.size)); ctx.fill();
         if (ty.pulse > 0.05) { disc(ctx, q.x, q.y, rd + q.r * 0.1); ctx.strokeStyle = rgba(T.hub, ty.pulse); ctx.lineWidth = Math.max(0.6, q.r * 0.07); ctx.stroke(); }
         // ring of 10 arcs, one per table
         for (let t = 0; t < 10; t++) {
@@ -553,7 +603,7 @@ function drawStage(rep: TablesReply | null): void {
     void live;
   } else if (S.level === 1) {
     ring.positions.forEach((p, sb) => {
-      node(ctx, p, lw, T.ring, S.hover === sb);
+      node(ctx, sb, lw, T.ring, S.hover === sb, T.subarena);
       const inner = ringPositions(p.x, p.y, p.r - lw, 10);
       const cells: Cell[] = [];
       inner.positions.forEach((q, t) => {
@@ -576,7 +626,7 @@ function drawStage(rep: TablesReply | null): void {
       let stroke = T.ring;
       let st: RoundState | null = null; let pr = { k: 0, waiting: true, since: 1 };
       if (plan && rep) { pr = progress(rep, plan); st = stateAt(plan, pr.k); if (!pr.waiting) { if (st.status === 'fell') stroke = T.fell; else if (st.status !== 'active') stroke = T.cashed; } }
-      node(ctx, p, lw * 1.2, stroke, S.hover === t, T.table);
+      node(ctx, t, lw * 1.2, stroke, S.hover === t, T.table);
       if (!plan || !st) return;
       const R = p.r * (S.text ? 0.66 : 0.84);
       drawOverheadAt(ctx, st, p.x, p.y - p.r * (S.text ? 0.2 : 0.04), R, pr.since < 1 && !pr.waiting ? pr.since : 1, plan.quality, false);
@@ -595,6 +645,7 @@ function drawStage(rep: TablesReply | null): void {
       ctx.fillText(scoreText(plan, st, pr.waiting), p.x, p.y + p.r * 0.82);
     });
   }
+  hubDraw(ctx, cx, cy, lay.hubR, hubLine);
   ctx.restore();
   if (S.text && rep == null && S.level >= 2) { ctx.fillStyle = T.hub; ctx.textAlign = 'center'; ctx.font = `${w / 30}px ui-monospace,monospace`; ctx.fillText('loading...', cx, cy + w * 0.2); }
   void hoverText;
@@ -604,9 +655,7 @@ function stageHit(ev: PointerEvent | MouseEvent): number {
   const rect = cv.getBoundingClientRect();
   const x = ((ev.clientX - rect.left) / rect.width) * cv.width, y = ((ev.clientY - rect.top) / rect.height) * cv.width;
   const { cx, cy, maxR } = stageGeom(cv.width);
-  const ring = ringPositions(cx, cy, maxR, 10);
-  if (Math.hypot(x - cx, y - cy) < hubRadius(ring)) return -2; // the hub
-  return hitRing(ring, x, y);
+  return hitLayout(hubLayout(cx, cy, maxR, S.hubT < 0 ? 0 : S.hubT), x, y);
 }
 function hoverInfo(i: number): string {
   if (i === -2) return S.level ? 'Collection Center Hub. Tap to go back one step.' : 'Collection Center Hub: where all the arenas meet.';
@@ -700,8 +749,11 @@ function legendHtml(): string {
     <div>${chip(`background:${b}`)} playing: a bigger disc is a taller stack</div>
     <div>${chip(`background:${b};border:3px solid ${T.cashed}`)} cashed out or connected</div>
     <div>${chip(`background:${T.table};border:3px solid ${T.fell}`)} fell</div>
-    <div>${chip(`background:${T.platform};border:3px dotted ${b}`)} ring of 10 arcs, one per table. Faint = waiting. Coin colour = placing coins (thicker arc = taller stack). Cashed colour = cashed out. Fell colour = fell</div>
-    <div>${chip(`background:${T.platform};border:2px solid ${T.hub};box-shadow:0 0 6px ${T.hub}`)} bright flash: a coin just landed</div>
+    <div>${chip(`background:${T.arena};border:2px solid ${T.ring}`)} an arena (10 sub-arenas)</div>
+    <div>${chip(`background:${T.subarena};border:2px solid ${T.ring}`)} a sub-arena (10 tables)</div>
+    <div>${chip(`background:${T.table};border:2px solid ${T.ring}`)} a table</div>
+    <div>${chip(`background:${T.subarena};border:3px dotted ${b}`)} ring of 10 arcs, one per table. Faint = waiting. Coin colour = placing coins (thicker arc = taller stack). Cashed colour = cashed out. Fell colour = fell</div>
+    <div>${chip(`background:${T.subarena};border:2px solid ${T.hub};box-shadow:0 0 6px ${T.hub}`)} bright flash: a coin just landed</div>
     <div>${chip(`background:${T.bot};width:10px;height:10px;margin:0 4px`)} a bot disc</div>
   </div>`;
 }
@@ -725,7 +777,7 @@ function renderRight(rep: TablesReply | null): void {
     }).join('')}</ul><h3 style="margin-top:14px">HOW TO READ THE COLOURS</h3>${legendHtml()}`;
     return;
   }
-  const key = `L${S.level}|${S.arena}|${T.coin}|${T.fell}|${T.platform}|${T.table}|${T.cashed}|${T.bot}|${T.ring}`;
+  const key = `L${S.level}|${S.arena}|${T.coin}|${T.fell}|${T.platform}|${T.arena}|${T.subarena}|${T.table}|${T.cashed}|${T.bot}|${T.ring}`;
   if (key === rightKey) return;
   rightKey = key; lastFocusKey = '';
   root.innerHTML = `<h3>${S.level === 0 ? 'ARENA OF ARENAS' : 'ARENA ' + S.arena}</h3>
@@ -812,13 +864,17 @@ function goSeat(seat: number): void {
 }
 
 // ---- colour panel ------------------------------------------------------------------------------------
+const LEVEL_ROWS: { key: ThemeColorKey; label: string; hint: string }[] = [
+  { key: 'arena', label: 'Main arena color', hint: 'the 10 big arena circles' },
+  { key: 'subarena', label: 'Sub-arena color', hint: 'the circles inside an arena, and the slab under a table close-up' },
+  { key: 'table', label: 'Table color', hint: 'the table circles and the surface a stack stands on' },
+];
 const COLOR_ROWS: { key: ThemeColorKey; label: string; hint: string }[] = [
   { key: 'bg', label: 'Background', hint: 'behind everything' },
   { key: 'text', label: 'Text', hint: 'words and numbers' },
   { key: 'coin', label: 'Coins', hint: 'the coin colour (best quality when blending)' },
   { key: 'coin2', label: 'Coins, worst quality', hint: 'used when colouring by quality' },
-  { key: 'platform', label: 'Platforms', hint: 'arena, sub-arena and table circles' },
-  { key: 'table', label: 'Table surface', hint: 'what the stack stands on' },
+  { key: 'platform', label: 'Platform (big circle)', hint: 'the big circle behind the 10 arenas' },
   { key: 'ring', label: 'Rings and outlines', hint: 'circle edges' },
   { key: 'hub', label: 'Hub text and highlights', hint: 'hub words, selection' },
   { key: 'hubFill', label: 'Hub fill', hint: 'the Collection Center Hub' },
@@ -830,6 +886,7 @@ function buildColors(): void {
   const box = $('colors');
   box.innerHTML = `<h3>COLORS <button id="cClose" style="padding:2px 10px">X</button></h3>
     <div class="sec">PRESETS</div><div id="presets"></div>
+    <div class="sec">LEVELS</div><div id="lrows"></div>
     <div class="sec">COINS</div>
     <div class="crow"><label for="cq">Colour coins by quality<small>blend from worst to best coin colour</small></label><input type="checkbox" id="cq"></div>
     <div class="sec">COLOURS</div><div id="crows"></div>
@@ -838,13 +895,16 @@ function buildColors(): void {
   const pr = $('presets');
   PRESETS.forEach((p) => {
     const b = document.createElement('button');
-    b.innerHTML = `<i><b style="background:${p.theme.bg};border:1px solid ${p.theme.ring}"></b><b style="background:${p.theme.platform}"></b><b style="background:${p.theme.coin}"></b><b style="background:${p.theme.hub}"></b></i>${p.name}`;
+    b.innerHTML = `<i><b style="background:${p.theme.bg};border:1px solid ${p.theme.ring}"></b><b style="background:${p.theme.arena}"></b><b style="background:${p.theme.subarena}"></b><b style="background:${p.theme.table}"></b><b style="background:${p.theme.coin}"></b><b style="background:${p.theme.hub}"></b></i>${p.name}`;
     b.onclick = () => setTheme(p.theme);
     b.dataset.preset = p.id;
     pr.appendChild(b);
   });
-  const rows = $('crows');
-  COLOR_ROWS.forEach((r) => {
+  const rnd = document.createElement('button');
+  rnd.id = 'cRandom'; rnd.textContent = 'RANDOM'; rnd.title = 'Pick every colour at random (press again for another)';
+  rnd.onclick = () => { setTheme(randomTheme(Math.random)); $('shareMsg').textContent = 'Random colours. Press RANDOM again for another set, or RESET to go back.'; };
+  pr.appendChild(rnd);
+  const addRow = (rows: HTMLElement, r: { key: ThemeColorKey; label: string; hint: string }): void => {
     const d = document.createElement('div');
     d.className = 'crow'; d.dataset.key = r.key;
     d.innerHTML = `<label>${r.label}<small>${r.hint}</small></label><input type="text" maxlength="7" spellcheck="false" data-hex="${r.key}"><input type="color" data-pick="${r.key}">`;
@@ -852,7 +912,9 @@ function buildColors(): void {
     const pick = d.querySelector('input[type=color]') as HTMLInputElement, txt = d.querySelector('input[type=text]') as HTMLInputElement;
     pick.oninput = () => setTheme({ [r.key]: pick.value } as Partial<Theme>);
     txt.onchange = () => { const h = normHex(txt.value); if (h) setTheme({ [r.key]: h } as Partial<Theme>); else syncColorInputs(); };
-  });
+  };
+  LEVEL_ROWS.forEach((r) => addRow($('lrows'), r));
+  COLOR_ROWS.forEach((r) => addRow($('crows'), r));
   ($('cq') as HTMLInputElement).onchange = (e) => setTheme({ coinByQuality: (e.target as HTMLInputElement).checked });
   $('cReset').onclick = () => { setTheme(DEFAULT_THEME); $('shareMsg').textContent = 'Back to black, white and red.'; };
   $('cClose').onclick = () => toggleColors(false);

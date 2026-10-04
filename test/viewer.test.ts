@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { FLASH_MS, TIGHT, arcFor, hitRing, hubRadius, liveCell, ringPositions, spotsFor, tally } from '../web/geometry.js';
+import { FLASH_MS, TIGHT, arcFor, hitLayout, hitRing, hubLayout, hubRadius, liveCell, ringPositions, spotsFor, tally } from '../web/geometry.js';
 import { textFlagFromHash, textFlagFromStore, withHashParam } from '../web/prefs.js';
 import {
-  DEFAULT_THEME, PRESETS, THEME_KEYS, coinBase, migrateTheme, coinTone, contrastOn, hexToHsl, hslToHex, mixHex, normHex, sameTheme, sanitizeTheme, themeFromHash, themeToHash,
+  DEFAULT_THEME, PRESETS, THEME_KEYS, coinBase, migrateTheme, coinTone, contrastOn, contrastRatio, hexToHsl, hslToHex, mixHex, normHex, randomTheme, rgbDistance, sameTheme, sanitizeTheme, themeFromHash, themeToHash,
 } from '../web/theme.js';
+import { qualityFromVolume } from '../src/quality.js';
 import { INDEX_HTML } from '../src/server/web-assets.generated.js';
 
 describe('colour themes', () => {
@@ -141,11 +142,126 @@ describe('tight ring around the hub (the eye)', () => {
     expect(sanitizeTheme({ table: '#123456' }).table).toBe('#123456');
   });
 
+  it('arena, sub-arena and table each have their own colour, different from each other, in the default and every preset', () => {
+    for (const p of [{ id: 'default', theme: DEFAULT_THEME }, ...PRESETS]) {
+      const t = p.theme;
+      expect(rgbDistance(t.arena, t.subarena), p.id).toBeGreaterThan(20);
+      expect(rgbDistance(t.subarena, t.table), p.id).toBeGreaterThan(20);
+      expect(rgbDistance(t.arena, t.table), p.id).toBeGreaterThan(20);
+    }
+  });
+
+  it('old saved themes get sensible arena and sub-arena colours; new ones round-trip', () => {
+    const old = { bg: '#000000', platform: '#ffffff', table: '#e0e0e0', coin: '#e0182d' };
+    const t = migrateTheme(sanitizeTheme(old));
+    expect(t.arena).toBe('#ffffff'); // arena takes the old platform colour
+    expect(t.subarena).not.toBe(t.arena);
+    expect(t.subarena).not.toBe(t.table);
+    expect(rgbDistance(t.subarena, t.table)).toBeGreaterThan(20);
+    const dark = sanitizeTheme({ platform: '#101b33', table: '#0f2a3d' });
+    expect(dark.arena).toBe('#101b33');
+    expect(luminanceOf(dark.subarena)).toBeGreaterThan(luminanceOf(dark.arena)); // a step toward the text side
+    // explicit values are kept
+    expect(sanitizeTheme({ arena: '#112233', subarena: '#223344', table: '#334455' })).toMatchObject({ arena: '#112233', subarena: '#223344', table: '#334455' });
+    // old share links (no arena or subarena) still open
+    expect(themeFromHash('#theme=bg:000000;platform:ffffff;table:e0e0e0;cq:0')!.arena).toBe('#ffffff');
+    // new share links carry all three
+    const link = themeToHash({ ...DEFAULT_THEME, arena: '#010203', subarena: '#040506', table: '#070809' });
+    expect(link).toContain('arena:010203');
+    expect(link).toContain('subarena:040506');
+    expect(themeFromHash('#' + link)).toMatchObject({ arena: '#010203', subarena: '#040506', table: '#070809' });
+  });
+
+  it('each level colour is set on its own', () => {
+    const t = sanitizeTheme({ ...DEFAULT_THEME, arena: '#aa0000' });
+    expect(t.arena).toBe('#aa0000');
+    expect(t.subarena).toBe(DEFAULT_THEME.subarena);
+    expect(t.table).toBe(DEFAULT_THEME.table);
+  });
+
+  it('RANDOM picks every colour at once with readable contrast and distinct level colours', () => {
+    let s = 12345;
+    const rng = (): number => { s = (s + 0x6d2b79f5) >>> 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+    const seen = new Set<string>();
+    for (let n = 0; n < 400; n++) {
+      const t = randomTheme(rng);
+      seen.add(JSON.stringify(t));
+      for (const k of THEME_KEYS) expect(normHex(t[k]), k).toBe(t[k]);
+      const levels = [t.platform, t.arena, t.subarena, t.table];
+      for (let i = 0; i < 4; i++) for (let j = i + 1; j < 4; j++) expect(rgbDistance(levels[i]!, levels[j]!), `level ${i}/${j} #${n}`).toBeGreaterThanOrEqual(26);
+      expect(contrastRatio(t.text, t.bg), 'text').toBeGreaterThanOrEqual(7);
+      expect(contrastRatio(t.coin, t.table), 'coin on table').toBeGreaterThanOrEqual(3);
+      for (const l of [...levels, t.bg]) expect(contrastRatio(t.ring, l), 'ring').toBeGreaterThanOrEqual(2.5);
+      expect(contrastRatio(t.hub, t.hubFill), 'hub').toBeGreaterThanOrEqual(4.5);
+      for (const k of ['fell', 'cashed'] as const) for (const l of [...levels, t.bg]) expect(contrastRatio(t[k], l), k).toBeGreaterThanOrEqual(3);
+      expect(contrastRatio(t.bot, t.table), 'bot').toBeGreaterThanOrEqual(3);
+      expect(sameTheme(sanitizeTheme(t), t)).toBe(true);
+    }
+    expect(seen.size).toBeGreaterThan(390); // pressing it again gives something new
+    // and with Math.random
+    expect(sameTheme(randomTheme(), randomTheme())).toBe(false);
+  });
+
   it('the hub is black by default and the old light grey hub moves to black', () => {
     expect(DEFAULT_THEME.hubFill).toBe('#000000');
     expect(PRESETS[0]!.theme.hubFill).toBe('#000000');
     expect(migrateTheme({ ...DEFAULT_THEME, hubFill: '#e6e6e6' }).hubFill).toBe('#000000');
     expect(migrateTheme({ ...DEFAULT_THEME, hubFill: '#123456' }).hubFill).toBe('#123456'); // a colour picked on purpose is kept
+  });
+});
+
+function luminanceOf(hex: string): number { return hexToHsl(hex)[2]; }
+
+describe('hub size follows coin volume', () => {
+  const w = 1000, maxR = w * 0.465;
+  const at = (usd: number) => hubLayout(w / 2, w / 2, maxR, qualityFromVolume(usd));
+
+  it('is as big as before at $0 and low volume, and about one arena circle at $100k and up', () => {
+    const base = ringPositions(w / 2, w / 2, maxR, 10);
+    for (const usd of [0, 100, 500]) expect(at(usd).hubR).toBeCloseTo(hubRadius(base), 6);
+    expect(at(100000).hubR).toBeCloseTo(base.circleRadius, 6);
+    expect(at(5_000_000).hubR).toBeCloseTo(base.circleRadius, 6);
+    expect(at(100000).hubR / hubRadius(base)).toBeLessThan(0.5);
+  });
+
+  it('shrinks steadily as volume rises (log scale, like coin quality)', () => {
+    let prev = Infinity;
+    for (const usd of [0, 500, 1000, 3000, 10000, 30000, 100000]) { const h = at(usd).hubR; expect(h).toBeLessThanOrEqual(prev); prev = h; }
+    expect(at(1500).hubR).toBeGreaterThan(at(30000).hubR);
+  });
+
+  it('the petals stay tight to the hub, reach the same outer edge, and the slot circles never change', () => {
+    const base = ringPositions(w / 2, w / 2, maxR, 10);
+    for (const usd of [0, 700, 5000, 30000, 100000]) {
+      const l = at(usd);
+      expect(l.petalDist - l.petalR).toBeCloseTo(l.hubR, 6); // touches the hub, no gap
+      expect(l.petalDist + l.petalR).toBeCloseTo(base.ringRadius + base.circleRadius, 6); // same outer edge
+      expect(l.petalR).toBeGreaterThanOrEqual(base.circleRadius - 1e-9); // arenas grow, never shrink
+      expect(l.ring.circleRadius).toBe(base.circleRadius);
+      // the slot circle always lies inside its petal
+      const p = l.ring.positions[3]!;
+      const px = w / 2 + Math.cos(p.angle) * l.petalDist, py = w / 2 + Math.sin(p.angle) * l.petalDist;
+      expect(Math.hypot(p.x - px, p.y - py) + p.r).toBeLessThanOrEqual(l.petalR + 1e-6);
+    }
+    expect(at(100000).petalR).toBeGreaterThan(at(0).petalR * 1.5);
+    expect(at(0).petalR).toBeCloseTo(base.circleRadius, 6); // today's circles
+    expect(at(0).sectorR).toBeCloseTo(at(0).hubR, 6); // nothing extra at the biggest hub
+    expect(at(100000).sectorR).toBeCloseTo(at(100000).petalDist, 6); // the pie slice wraps the small hub
+  });
+
+  it('hit testing finds the hub, the petals (including the grown part) and the gaps', () => {
+    const l = at(100000);
+    const cx = w / 2;
+    expect(hitLayout(l, cx, cx)).toBe(-2);
+    const near = (i: number, d: number) => { const a = l.ring.positions[i]!.angle; return hitLayout(l, cx + Math.cos(a) * d, cx + Math.sin(a) * d); };
+    for (let i = 0; i < 10; i++) {
+      expect(near(i, l.hubR * 1.1)).toBe(i); // the grown part right next to the hub
+      expect(near(i, l.petalDist)).toBe(i);
+      expect(near(i, l.outerR * 1.05)).toBe(-1);
+    }
+    // at the biggest hub it matches the plain circles
+    const big = at(0);
+    for (let i = 0; i < 10; i++) { const p = big.ring.positions[i]!; expect(hitLayout(big, p.x, p.y)).toBe(i); expect(hitRing(big.ring, p.x, p.y)).toBe(i); }
   });
 });
 
