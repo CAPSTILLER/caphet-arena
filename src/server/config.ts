@@ -39,6 +39,8 @@ export interface ServerConfig {
   chainRecordHouse: boolean;
   /** Longest a finishing request waits for the chain call before answering (the record is retried later). */
   chainWaitMs: number;
+  /** Watch-only demo: / shows the viewer and outside users cannot join, place or cash out (house bots with the house secret still can). */
+  demoMode: boolean;
 }
 
 export function defaultConfig(overrides: Partial<ServerConfig> = {}): ServerConfig {
@@ -61,6 +63,8 @@ export function defaultConfig(overrides: Partial<ServerConfig> = {}): ServerConf
     adminSecret: process.env.ADMIN_SECRET ?? '',
     chainRecordHouse: process.env.CHAIN_RECORD_HOUSE === 'on',
     chainWaitMs: 6000,
+    // createApp stays open for tests and library use. The deployed entry (appFromEnv) turns it on unless DEMO_MODE=off.
+    demoMode: false,
     ...overrides,
   };
 }

@@ -2,7 +2,8 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterAll, describe, expect, it } from 'vitest';
-import { BlobStore, type BlobClient } from '../src/server/store/blob.js';
+import { BlobStore } from '../src/server/store/blob.js';
+import { fakeBlob } from './helpers/fake-blob.js';
 import { FileStore } from '../src/server/store/file.js';
 import { MemoryStore } from '../src/server/store/memory.js';
 import type { Store } from '../src/server/store/types.js';
@@ -25,32 +26,6 @@ async function contract(store: Store): Promise<void> {
   expect(await store.list('a/')).toEqual(['a/2']);
   const wins = await Promise.all(Array.from({ length: 10 }, (_, i) => store.putIfAbsent('seat/1', { i })));
   expect(wins.filter(Boolean)).toHaveLength(1);
-}
-
-/** A fake of the Vercel Blob SDK slice, keeping blobs in a Map, to test the adapter without credentials. */
-function fakeBlob(): BlobClient & { calls: string[] } {
-  const blobs = new Map<string, string>();
-  const calls: string[] = [];
-  return {
-    calls,
-    async put(pathname, body, opts) {
-      calls.push(`put ${pathname} private=${opts.access === 'private'} overwrite=${opts.allowOverwrite}`);
-      if (!opts.allowOverwrite && blobs.has(pathname)) throw new Error('This blob already exists, use `allowOverwrite: true` to overwrite it');
-      blobs.set(pathname, body);
-      return {};
-    },
-    async get(pathname) {
-      const v = blobs.get(pathname);
-      if (v === undefined) return null;
-      return { statusCode: 200, stream: new Response(v).body };
-    },
-    async del(pathname) {
-      for (const p of Array.isArray(pathname) ? pathname : [pathname]) blobs.delete(p);
-    },
-    async list({ prefix }) {
-      return { blobs: [...blobs.keys()].filter((k) => k.startsWith(prefix)).map((pathname) => ({ pathname })), hasMore: false };
-    },
-  };
 }
 
 const dirs: string[] = [];

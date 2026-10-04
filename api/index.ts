@@ -1,16 +1,16 @@
 /**
- * Vercel Function entry (Node runtime). vercel.json rewrites every path here.
- * Set BLOB_READ_WRITE_TOKEN (Vercel Blob store), SERVER_SECRET and HOUSE_SECRET in the project env.
- * NOT deployed or tested on Vercel yet; locally it is exercised through scripts/serve.ts and the tests.
+ * Vercel Function entry (Node.js runtime, Web Standard "fetch" export). vercel.json sends every path here.
+ * It needs no environment variables to run the watch-only demo. Optional settings are listed in DEPLOY.md.
+ * Locally the same app runs through scripts/serve.ts, and the tests call this file's fetch directly.
  */
 import { handle } from 'hono/vercel';
 import { appFromEnv } from '../src/server/env.js';
 
-export const config = { runtime: 'nodejs' };
-
 let handler: ((req: Request) => Response | Promise<Response>) | undefined;
 
-export default async function (req: Request): Promise<Response> {
-  if (!handler) handler = handle((await appFromEnv()).app) as (req: Request) => Promise<Response>;
-  return handler(req);
-}
+export default {
+  async fetch(req: Request): Promise<Response> {
+    if (!handler) handler = handle((await appFromEnv()).app) as (req: Request) => Promise<Response>;
+    return handler(req);
+  },
+};

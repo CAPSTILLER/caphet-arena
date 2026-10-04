@@ -6,17 +6,21 @@
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { createPublicClient, http, keccak256, toHex } from 'viem';
+import { mnemonicToAccount } from 'viem/accounts';
 import { foundry } from 'viem/chains';
 import { gameRecordsAbi } from '../src/chain/abi.js';
 import { ViemRecorder } from '../src/chain/records.js';
 import { createApp } from '../src/server/app.js';
 import { FixedVolumeProvider } from '../src/server/volume.js';
 
-// anvil's well known test accounts (public, worthless)
-const DEPLOYER = '0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
-const OWNER = '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC';
-const OPERATOR_KEY = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
-const OPERATOR = '0x70997970C51812dc3A010C7d01b50e0d17dc79C8';
+// anvil's default test accounts come from this public test phrase (worthless on any real network)
+const PHRASE = 'test test test test test test test test test test test junk';
+const acct = (i: number) => mnemonicToAccount(PHRASE, { addressIndex: i });
+const keyOf = (i: number) => toHex(acct(i).getHdKey().privateKey!);
+const DEPLOYER = keyOf(0);
+const OPERATOR_KEY = keyOf(1);
+const OPERATOR = acct(1).address;
+const OWNER = acct(2).address;
 const RPC = 'http://127.0.0.1:8546';
 
 const anvil = spawn('anvil', ['--port', '8546', '--silent']);
@@ -36,7 +40,7 @@ try {
   const post = async (path: string, body: unknown, key?: string) =>
     (await app.request(path, { method: 'POST', headers: { 'content-type': 'application/json', ...(key ? { authorization: `Bearer ${key}` } : {}) }, body: JSON.stringify(body) })).json() as Promise<any>;
 
-  const wallet = '0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc';
+  const wallet = acct(5).address;
   const results: string[] = [];
   for (const dx of [20.4, 60]) {
     const j = await post('/join', { wallet, mode: 'single', botName: 'Local' });

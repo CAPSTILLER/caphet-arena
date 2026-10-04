@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CAPHET Arena (watch-only demo)</title>
+<meta name="description" content="Watch AI house bots stack coins in the CAPHET Arena. Play coins only.">
+<style>
+:root { --bg:#070b16; --panel:#0e1526; --panel2:#121b30; --line:#1d2a47; --teal:#23d5c4; --yellow:#ffd34d; --green:#3ddc84; --red:#ff5a6a; --text:#dbe6ff; --dim:#7b8bb0; }
+* { box-sizing:border-box; }
+html,body { margin:0; height:100%; background:var(--bg); color:var(--text); font:13px/1.35 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+body { display:flex; flex-direction:column; min-height:100vh; }
+button { font:inherit; color:var(--text); background:var(--panel2); border:1px solid var(--line); border-radius:999px; padding:6px 12px; cursor:pointer; letter-spacing:.04em; }
+button:hover { border-color:var(--teal); }
+button.on { border-color:var(--teal); color:var(--yellow); box-shadow:0 0 0 1px var(--teal) inset, 0 0 14px rgba(35,213,196,.25); }
+header { display:flex; flex-wrap:wrap; gap:14px; align-items:center; padding:12px 18px; border-bottom:1px solid var(--line); }
+.logo { font-weight:800; font-size:20px; letter-spacing:.14em; }
+.logo small { display:block; font-size:10px; color:var(--teal); letter-spacing:.3em; }
+.crumb { color:var(--dim); letter-spacing:.08em; text-transform:uppercase; }
+.crumb b { color:var(--text); }
+.spacer { flex:1; }
+.modes button { padding:8px 16px; text-transform:uppercase; }
+.pickers { display:flex; flex-wrap:wrap; gap:18px; align-items:center; padding:10px 18px; border-bottom:1px solid var(--line); }
+.pickers label { color:var(--dim); font-size:11px; letter-spacing:.2em; margin-right:6px; }
+.row { display:flex; gap:4px; align-items:center; }
+.row button { padding:4px 9px; border-radius:8px; min-width:30px; }
+select { font:inherit; color:var(--text); background:var(--panel2); border:1px solid var(--line); border-radius:8px; padding:5px 8px; }
+.strip { display:flex; flex-wrap:wrap; gap:10px; padding:10px 18px; }
+.stat { background:var(--panel); border:1px solid var(--line); border-radius:10px; padding:6px 12px; min-width:112px; }
+.stat i { display:block; font-style:normal; color:var(--dim); font-size:10px; letter-spacing:.18em; text-transform:uppercase; }
+.stat b { font-size:17px; }
+.y { color:var(--yellow); } .g { color:var(--green); } .r { color:var(--red); } .t { color:var(--teal); }
+main { display:grid; grid-template-columns:270px minmax(0,1fr) 330px; gap:14px; padding:0 18px 14px; flex:1; }
+@media (max-width:1250px) { main { grid-template-columns:240px minmax(0,1fr); } #focus { grid-column:1 / -1; } }
+@media (max-width:760px) { main { grid-template-columns:1fr; } }
+.panel { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px 14px; }
+.panel h3 { margin:0 0 8px; font-size:11px; color:var(--dim); letter-spacing:.24em; font-weight:600; }
+.kv { display:flex; justify-content:space-between; padding:2px 0; gap:10px; }
+.kv span:first-child { color:var(--dim); }
+.bar { height:8px; background:var(--line); border-radius:6px; overflow:hidden; margin:6px 0 8px; }
+.bar div { height:100%; background:linear-gradient(90deg,var(--red),var(--yellow),var(--green)); }
+#lb { list-style:none; margin:0; padding:0; max-height:360px; overflow:auto; }
+#lb li { display:flex; gap:8px; padding:4px 6px; border-radius:8px; cursor:pointer; align-items:center; }
+#lb li:hover { background:var(--panel2); }
+#lb li .n { color:var(--dim); width:20px; text-align:right; }
+#lb li .nm { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#lb li .sc { color:var(--yellow); font-weight:700; }
+.tag { font-size:9px; border:1px solid var(--teal); color:var(--teal); border-radius:6px; padding:0 4px; letter-spacing:.1em; }
+#grid { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10px; align-content:start; }
+@media (max-width:1100px) { #grid { grid-template-columns:repeat(3,minmax(0,1fr)); } }
+@media (max-width:560px) { #grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+.card { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:8px; cursor:pointer; position:relative; }
+.card:hover { border-color:var(--teal); }
+.card.sel { border-color:var(--yellow); box-shadow:0 0 18px rgba(255,211,77,.22); }
+.card .top { display:flex; justify-content:space-between; gap:6px; font-size:11px; color:var(--dim); }
+.card .top b { color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.card canvas { width:100%; aspect-ratio:1; display:block; border-radius:10px; margin:6px 0; }
+.card .bot { display:flex; justify-content:space-between; align-items:center; }
+.badge { font-size:10px; letter-spacing:.14em; padding:2px 7px; border-radius:6px; border:1px solid var(--line); color:var(--dim); }
+.badge.play { color:var(--teal); border-color:var(--teal); }
+.badge.fell { color:var(--red); border-color:var(--red); background:rgba(255,90,106,.1); }
+.badge.cashed { color:var(--green); border-color:var(--green); background:rgba(61,220,132,.1); }
+.badge.touched { color:var(--teal); border-color:var(--teal); background:rgba(35,213,196,.12); }
+.score { font-weight:800; font-size:16px; color:var(--yellow); }
+#focus canvas { width:100%; display:block; border-radius:10px; margin:8px 0; background:rgba(255,255,255,.03); }
+#focus .ov { aspect-ratio:1; }
+#focus .sd { height:210px; }
+code { color:var(--teal); word-break:break-all; font-size:11px; }
+footer { display:flex; flex-wrap:wrap; gap:10px; align-items:center; padding:10px 18px; border-top:1px solid var(--line); background:#050810; position:sticky; bottom:0; }
+footer .grp { display:flex; gap:6px; align-items:center; }
+footer .note { color:var(--dim); font-size:11px; margin-left:auto; }
+.swatch { width:22px; height:22px; border-radius:50%; border:1px solid var(--line); padding:0; }
+input[type=color] { width:34px; height:28px; border:1px solid var(--line); background:var(--panel2); border-radius:8px; padding:2px; cursor:pointer; }
+#modal { position:fixed; inset:0; background:rgba(0,0,0,.65); display:none; align-items:center; justify-content:center; z-index:10; padding:20px; }
+#modal.show { display:flex; }
+#modal .box { max-width:640px; background:var(--panel); border:1px solid var(--teal); border-radius:16px; padding:20px 24px; line-height:1.55; max-height:90vh; overflow:auto; }
+#modal h2 { margin-top:0; letter-spacing:.12em; }
+.banner { background:linear-gradient(90deg,rgba(35,213,196,.14),transparent); border-left:3px solid var(--teal); padding:6px 12px; margin:0 18px 8px; color:var(--dim); border-radius:6px; }
+.banner b { color:var(--teal); }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">CAPHET<small>ARENA &middot; WATCH-ONLY DEMO</small></div>
+  <div class="crumb" id="crumb"></div>
+  <div class="spacer"></div>
+  <div class="modes" id="modes"></div>
+</header>
+<div class="banner"><b>Demo.</b> Every table below is always playing a house bot with play coins. No wallet, no real tokens, nobody can join. Each round is a real engine round that your browser replays itself.</div>
+<div class="pickers">
+  <div class="row"><label>ARENA</label><span id="arenas" class="row"></span></div>
+  <div class="row"><label>SUB-ARENA</label><span id="subs" class="row"></span></div>
+  <div class="row"><label>COIN VOLUME</label><select id="vol"></select></div>
+</div>
+<div class="strip" id="strip"></div>
+<main>
+  <section>
+    <div class="panel" id="tele"><h3>TELEMETRY</h3><div id="teleBody"></div></div>
+    <div class="panel" style="margin-top:12px"><h3>LEADERBOARD <span class="tag">HOUSE</span></h3><ol id="lb"></ol></div>
+  </section>
+  <section id="grid"></section>
+  <section class="panel" id="focus"></section>
+</main>
+<footer>
+  <div class="grp"><button id="follow">&#9678; FOLLOW LEADER</button></div>
+  <div class="grp"><button id="pause" title="pause or resume">&#10073;&#10073;</button><span id="speeds" class="grp"></span></div>
+  <div class="grp"><span style="color:var(--dim)">THEME</span><input type="color" id="bg" value="#070b16" title="background colour"><span id="swatches" class="grp"></span></div>
+  <div class="grp"><button id="info">i</button></div>
+  <div class="note">Play coins only &middot; house bots &middot; click a table to zoom</div>
+</footer>
+<div id="modal"><div class="box" id="modalBox"></div></div>
+<script src="/demo.js"></script>
+</body>
+</html>

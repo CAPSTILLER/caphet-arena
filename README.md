@@ -11,10 +11,23 @@ This repo has four parts:
 
 ## Status
 
-- Play coin demo: ready to deploy.
+- **Watch-only visual demo: ready to deploy.** The page at `/` shows house bots playing every seat. See DEPLOY.md.
+- Play coin game API: built (`DEMO_MODE=off` turns it on for outside users).
 - Wallet login with a signature: built, off by default (`AUTH_MODE=signature` turns it on).
 - Onchain records: contract written and tested, server hook written and tested with a mock and with a local test chain. Nothing is deployed anywhere.
 - Real token payouts: not built. When they are, money records go onchain, not in a database.
+
+## The watch-only demo (the page at `/`)
+
+Open the root URL in a browser. You see a dark overhead view of 10 tables at a time with the 63.5 mm coin, the bot name, score, status (playing, fell, cashed out, connected), coin count and coin quality. Pick the mode (single, twin, triple), the arena (0-9) and sub-arena (0-9) to move between all 1,000 seats of a mode. A stats strip shows bots playing, rounds finished, falls, cash-outs, connected stacks, coins stacked, best score, the live 24h CAPH volume and the coin quality it gives. A house leaderboard sits on the left, a zoomed focus view with a side profile on the right, and the bottom bar has pause, speed, a background colour picker and "follow leader". A volume menu lets you see what better or worse coins look like (the real market volume is very low, so live coins are poor).
+
+How it works without any long-running process:
+- Every seat plays one house bot round per minute. A round is a pure function of its id `d-<mode>-<seat>-<minute>-<volume>`: the seed comes from the id, the bot is one of the 10 archetypes, and the moves come from the real engine. Nothing has to be stored.
+- The server hands the browser the seed, the locked volume and the moves for 10 tables (`GET /demo/tables`). The browser bundles the same engine and replays every move itself, and shows "matches server result". Anyone can open `/replay/<round id>` and get the same round.
+- The leaderboard and totals are counted "on request": the first visitor after a minute ends triggers one count of that minute (about 1 to 2 seconds), which is stored. No cron job is needed. Minutes when nobody watched are not counted.
+- Storage is behind the same interface as the game. With no Blob token it is memory (zero setup, resets on cold starts). With `BLOB_READ_WRITE_TOKEN` it uses Vercel Blob and the totals persist.
+- `DEMO_MODE` (default `on`): join, place, cash out and wallet login return 403 for outside users. House bots that send the house secret still work, and all the code for the real API stays. Set `DEMO_MODE=off` to open the real API (for example for the example agent).
+- After changing `web/` or the engine run `npm run build:web`. The page is bundled into `src/server/web-assets.generated.ts` and a test fails if it is out of date.
 
 ## Try it in two minutes
 
@@ -23,7 +36,13 @@ You need Node 22 or newer.
 ```
 npm install
 npm test                                                   # all tests, no keys needed
-HOUSE_SECRET=localhouse VOLUME_OVERRIDE_USD=30000 npm run serve
+VOLUME_OVERRIDE_USD=30000 npm run serve                    # open http://localhost:8787 in a browser
+```
+
+To play the real API locally, turn demo mode off:
+
+```
+DEMO_MODE=off HOUSE_SECRET=localhouse VOLUME_OVERRIDE_USD=30000 npm run serve
 BASE_URL=http://localhost:8787 npm run agent               # the example agent plays one round
 HOUSE_SECRET=localhouse npm run house-bots -- http://localhost:8787 6
 ```
@@ -155,7 +174,7 @@ Play coins only, no real tokens. An API key (`sk_...`) is issued at join and is 
 
 ```
 npm install
-HOUSE_SECRET=localhouse VOLUME_OVERRIDE_USD=30000 npm run serve      # http://localhost:8787, in-memory store
+DEMO_MODE=off HOUSE_SECRET=localhouse VOLUME_OVERRIDE_USD=30000 npm run serve   # http://localhost:8787, in-memory store
 BASE_URL=http://localhost:8787 npm run agent                          # examples/agent.ts (31 lines)
 HOUSE_SECRET=localhouse npm run house-bots -- http://localhost:8787 6 # 10 archetypes, 6 rounds each, HTTP only
 npm test
@@ -186,6 +205,7 @@ Read `GET /llms.txt` (plain language rules) and `GET /openapi.json` on the runni
 | `SERVER_SECRET` | Seals stored seeds. Set a long random value in production. |
 | `HOUSE_SECRET` | House bots send it as `x-house-secret`. Empty turns house mode off. |
 | `ADMIN_SECRET` | Lets `POST /admin/chain/flush` run (header `x-admin-secret`). Empty turns it off. |
+| `DEMO_MODE` | `on` (default): watch-only demo page at `/`, outside users cannot join or play. `off`: the real play-coin API is open. |
 | `AUTH_MODE` | `open` (default, address only) or `signature` (wallet login required). |
 | `AUTH_DOMAIN`, `AUTH_CHAIN_ID` | Domain and chain id written in the sign-in message. Default: request host and 8453. |
 | `VOLUME_OVERRIDE_USD`, `FALLBACK_VOLUME_USD` | Fixed volume for testing, and the value used if the market lookup fails. |
@@ -248,7 +268,7 @@ How the hashes are built, so anyone can recompute them from `/replay/:round`:
 - `movesHash` = keccak256 of the move list written as text: a placement is `p:<stack>:<dx>:<dy>`, a cash out is `c`, joined with `;`.
 - `volumeBucket` = round(quality x 10), from 0 to 10.
 
-## Deploying (not done yet)
+## Deploying
 
-Nothing here has been deployed. When Cap is ready: import the GitHub repo in Vercel, add a Vercel Blob store (this sets `BLOB_READ_WRITE_TOKEN`), set `SERVER_SECRET`, `HOUSE_SECRET`, `ADMIN_SECRET` and `AUTH_MODE`, then point a domain at it. Run the house bots from any machine against the live URL with the same `HOUSE_SECRET`.
+See DEPLOY.md for the exact Vercel steps. The demo needs no environment variables. Nothing is deployed yet.
 Do not commit `node_modules`, `.vercel`, `dist` or any `.env` file. The `.gitignore` covers them.

@@ -13,6 +13,8 @@ import { MemoryRateLimiter, type RateLimiter } from './ratelimit.js';
 import { GameService } from './service.js';
 import { MemoryStore } from './store/memory.js';
 import type { Store } from './store/types.js';
+import { DemoService } from '../demo/service.js';
+import { APP_JS, INDEX_HTML } from './web-assets.generated.js';
 import { LiveVolumeProvider, type VolumeProvider } from './volume.js';
 
 export interface AppDeps {
@@ -41,6 +43,7 @@ export function createApp(deps: AppDeps = {}): { app: Hono; service: GameService
   const limiter = deps.limiter ?? new MemoryRateLimiter(now);
   const volume = deps.volume ?? new LiveVolumeProvider(config.fallbackVolumeUsd);
   const service = new GameService({ store, config, volume, now, randomHex: deps.randomHex, randomInt: deps.randomInt, recorder: deps.recorder });
+  const demo = new DemoService(store, volume, now);
   const walletAuth = new WalletAuth(store, { domain: config.authDomain, chainId: config.authChainId, nonceTtlMs: config.nonceTtlMs }, now, deps.signatureVerifier);
   const app = new Hono();
 
@@ -98,7 +101,14 @@ export function createApp(deps: AppDeps = {}): { app: Hono; service: GameService
   };
 
   // ---- docs -------------------------------------------------------------
-  app.get('/', (c) => c.json({ name: 'CAPHET AI Bot Arena', authMode: config.authMode, rules: '/llms.txt', spec: '/openapi.json', health: '/health' }));
+  app.get('/', (c) => {
+    if (config.demoMode && (c.req.header('accept') ?? '').includes('text/html')) {
+      return c.html(INDEX_HTML, 200, { 'cache-control': 'no-cache' });
+    }
+    return c.json({ name: 'CAPHET AI Bot Arena', demoMode: config.demoMode, authMode: config.authMode, viewer: config.demoMode ? '/' : null, demo: '/demo/config', rules: '/llms.txt', spec: '/openapi.json', health: '/health' });
+  });
+  app.get('/demo.js', (c) => c.body(APP_JS, 200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' }));
+  app.get('/favicon.ico', (c) => c.body(null, 204));
   app.get('/health', (c) => c.json({ ok: true, time: now() }));
   app.get('/llms.txt', (c) => c.text(llmsTxt(config, baseUrl(c)), 200, { 'content-type': 'text/plain; charset=utf-8' }));
   app.get('/openapi.json', (c) => c.json(openApi(baseUrl(c), config.authMode)));
@@ -120,6 +130,7 @@ export function createApp(deps: AppDeps = {}): { app: Hono; service: GameService
 
   // ---- join -------------------------------------------------------------
   app.post('/join', async (c) => {
+    demoGate(c);
     const house = isHouse(c);
     if (!house) limit(`join-ip:${ipOf(c)}`, config.limits.joinPerIpPerMin, 60_000, 'join requests from this IP');
     const body = await readBody(c);
@@ -141,6 +152,46 @@ export function createApp(deps: AppDeps = {}): { app: Hono; service: GameService
     return c.json(await service.join({ wallet, mode: body.mode as Mode, botName, house }));
   });
 
+  // ---- watch-only demo (always on the API, the page is shown when DEMO_MODE is on) ----
+  const parseMode = (v: string | undefined): Mode => {
+    const m = v ?? 'single';
+    if (!(MODES as readonly string[]).includes(m)) throw new ApiError(400, 'bad_mode', 'mode must be single, twin or triple.');
+    return m as Mode;
+  };
+  const intIn = (v: string | undefined, name: string, lo: number, hi: number, dflt: number): number => {
+    if (v === undefined || v === '') return dflt;
+    const n = Number(v);
+    if (!Number.isInteger(n) || n < lo || n > hi) throw new ApiError(400, 'bad_' + name, `${name} must be a whole number from ${lo} to ${hi}.`);
+    return n;
+  };
+  app.get('/demo/config', async (c) => {
+    readLimit(c);
+    return c.json({ ...(await demo.config()), demoMode: config.demoMode });
+  });
+  app.get('/demo/tables', async (c) => {
+    readLimit(c);
+    const slotQ = c.req.query('slot');
+    return c.json(
+      await demo.tables(parseMode(c.req.query('mode')), intIn(c.req.query('arena'), 'arena', 0, 9, 0), intIn(c.req.query('sub'), 'sub', 0, 9, 0), slotQ === undefined ? null : intIn(slotQ, 'slot', 0, 1e9, 0), c.req.query('vol') ?? 'live'),
+      200,
+      { 'cache-control': 'public, max-age=30' },
+    );
+  });
+  app.get('/demo/summary', async (c) => {
+    readLimit(c);
+    return c.json(await demo.summary(parseMode(c.req.query('mode')), c.req.query('vol') ?? 'live'));
+  });
+  app.get('/demo/round/:id', (c) => {
+    readLimit(c);
+    return c.json(demo.roundView(c.req.param('id')));
+  });
+  /** Watch-only demo: outside users cannot start or play rounds. House bots with the house secret still can. */
+  const demoGate = (c: Context): void => {
+    if (config.demoMode && !isHouse(c)) {
+      throw new ApiError(403, 'demo_mode', 'This server is a watch-only demo. Joining and playing are switched off. Watch the house bots at / and read the rules at /llms.txt.');
+    }
+  };
+
   // ---- onchain records (optional) -------------------------------------------
   app.get('/chain', (c) => c.json({ ...service.chainInfo(), note: 'When enabled, each finished round is written to the GameRecords contract. See /replay/:round for its chain status.' }));
   app.post('/admin/chain/flush', async (c) => {
@@ -152,6 +203,7 @@ export function createApp(deps: AppDeps = {}): { app: Hono; service: GameService
 
   // ---- wallet login -------------------------------------------------------
   app.post('/auth/nonce', async (c) => {
+    demoGate(c);
     limit(`nonce-ip:${ipOf(c)}`, config.limits.joinPerIpPerMin, 60_000, 'sign-in requests from this IP');
     const body = await readBody(c);
     const wallet = normalizeWallet(body.wallet);
@@ -164,6 +216,7 @@ export function createApp(deps: AppDeps = {}): { app: Hono; service: GameService
 
   // ---- play -------------------------------------------------------------
   app.post('/place', async (c) => {
+    demoGate(c);
     const key = keyOf(c);
     const doc = await service.authenticate(key);
     if (!isHouse(c)) limit(`place:${doc.id}`, config.limits.placePer10s, 10_000, 'moves');
@@ -177,6 +230,7 @@ export function createApp(deps: AppDeps = {}): { app: Hono; service: GameService
   });
 
   app.post('/cashout', async (c) => {
+    demoGate(c);
     const doc = await service.authenticate(keyOf(c));
     if (!isHouse(c)) limit(`place:${doc.id}`, config.limits.placePer10s, 10_000, 'moves');
     return c.json(await service.cashOut(doc.id));
@@ -189,7 +243,9 @@ export function createApp(deps: AppDeps = {}): { app: Hono; service: GameService
   });
   app.get('/replay/:round', async (c) => {
     readLimit(c);
-    return c.json(await service.replayView(c.req.param('round')));
+    const id = c.req.param('round');
+    if (id.startsWith('d-')) return c.json(demo.roundView(id));
+    return c.json(await service.replayView(id));
   });
   app.get('/leaderboard', async (c) => {
     readLimit(c);

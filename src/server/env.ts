@@ -22,7 +22,8 @@ export async function storeFromEnv(): Promise<{ store: Store; kind: 'blob' | 'fi
 export async function appFromEnv(extra: AppDeps = {}) {
   const { store, kind } = await storeFromEnv();
   const recorder = extra.recorder !== undefined ? extra.recorder : recorderFromEnv();
-  const made = createApp({ store, recorder, ...extra });
+  const demoMode = (process.env.DEMO_MODE ?? 'on').toLowerCase() !== 'off';
+  const made = createApp({ store, recorder, ...extra, config: { demoMode, ...extra.config } });
   // Records go onchain under wallet addresses, so wallets must be proven first.
   if (recorder && recorder.kind !== 'mock' && made.config.authMode !== 'signature') {
     throw new Error('Onchain records need AUTH_MODE=signature (wallets must be verified before results are written to a chain).');
