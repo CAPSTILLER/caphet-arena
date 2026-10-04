@@ -20,6 +20,7 @@ That is all. The demo runs on a memory store, which means it works with zero set
 
 - `/` shows the arena of arenas. Tap an arena, then a sub-arena, then a table to see its stack up close. Use BACK, the trail at the top, the Escape key or the hub to come out. TABLE GRID switches to the older ten-card layout. SINGLE, TWIN and TRIPLE change the mode. Try the volume menu ("What-if $100,000" gives perfect coins).
 - Open COLORS at the bottom. Pick a preset or change the background, coins, platforms, outlines, hub, bot discs and more. COPY SHARE LINK gives a link that carries your colours. RESET goes back to black, white and red.
+- TEXT: ON/OFF at the bottom hides all the labels on the picture. `/#text=off` opens with them hidden.
 - A link like `/#go=3.5.2` opens arena 3, sub-arena 5, table 2 directly.
 - Try pause and the speed buttons too.
 - `/health` should show `{"ok":true,...}`.

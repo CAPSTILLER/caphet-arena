@@ -1,9 +1,10 @@
 // Browser side of the watch-only demo. Bundled with the real engine so the browser replays every round itself.
 import { cashOut, createRound, placeCoin } from '../src/engine.js';
 import type { Mode, Move, RoundState } from '../src/types.js';
-import { type Cell, arcFor, hitRing, liveCell, ringPositions, spotsFor, tally } from './geometry.js';
+import { type Cell, arcFor, hitRing, hubRadius, liveCell, ringPositions, spotsFor, tally } from './geometry.js';
+import { textFlagFromHash, textFlagFromStore, withHashParam } from './prefs.js';
 import {
-  DEFAULT_THEME, PRESETS, type Theme, type ThemeColorKey, THEME_KEYS, coinBase, coinTone, contrastOn, mixHex, normHex, rgba, sameTheme, sanitizeTheme, themeFromHash, themeToHash,
+  DEFAULT_THEME, PRESETS, migrateTheme, type Theme, type ThemeColorKey, THEME_KEYS, coinBase, coinTone, contrastOn, mixHex, normHex, rgba, sameTheme, sanitizeTheme, themeFromHash, themeToHash,
 } from './theme.js';
 
 type Plan = {
@@ -28,13 +29,14 @@ const S = {
   mode: 'single' as Mode, arena: 0, sub: 0, vol: 'live', table: 0,
   view: 'rings' as 'rings' | 'grid', level: 0, hover: -1,
   anim: null as null | { t0: number; dir: number }, dirty: true,
-  speed: 1, paused: false, vt: 0, lastReal: 0, clockOffset: 0, serverSlot: 0, slotMs: 60000,
+  text: true, speed: 1, paused: false, vt: 0, lastReal: 0, clockOffset: 0, serverSlot: 0, slotMs: 60000,
   config: null as any, summary: null as Summary | null,
 };
 
 // ---- theme -----------------------------------------------------------------------------------
 let T: Theme = { ...DEFAULT_THEME };
 const THEME_STORE = 'caphet-theme-v2';
+const TEXT_STORE = 'caphet-text';
 function applyTheme(): void {
   const st = document.documentElement.style;
   st.setProperty('--bg', T.bg); st.setProperty('--text', T.text); st.setProperty('--coin', T.coin); st.setProperty('--ring', T.ring);
@@ -50,7 +52,7 @@ function setTheme(patch: Partial<Theme>, save = true): void {
 }
 function loadTheme(): void {
   let found: Theme | null = null;
-  try { const raw = localStorage.getItem(THEME_STORE); if (raw) found = sanitizeTheme(JSON.parse(raw)); } catch { /* ignore */ }
+  try { const raw = localStorage.getItem(THEME_STORE); if (raw) found = migrateTheme(sanitizeTheme(JSON.parse(raw))); } catch { /* ignore */ }
   const fromHash = themeFromHash(location.hash);
   if (fromHash) found = fromHash;
   if (found) { T = found; if (fromHash) { try { localStorage.setItem(THEME_STORE, JSON.stringify(T)); } catch { /* ignore */ } } }
@@ -276,6 +278,7 @@ function drawStanding(cv: HTMLCanvasElement, st: RoundState, quality: number): v
       }
     });
   }
+  if (!S.text) return;
   ctx.fillStyle = rgba(T.text, 0.6); ctx.font = `${Math.max(10, W / 34)}px ui-monospace,monospace`;
   ctx.fillText(`standing view, coin thickness drawn ${THICK}x`, 10, Math.max(14, W / 30));
 }
@@ -350,6 +353,7 @@ function applyViewClasses(): void {
   document.body.classList.toggle('grid', S.view === 'grid');
   document.body.classList.toggle('close', S.view === 'rings' && S.level === 3);
   $('gridPick').style.display = S.view === 'grid' ? 'flex' : 'none';
+  ($('textBtn') as HTMLButtonElement).disabled = S.view === 'grid';
   ($('back') as HTMLButtonElement).disabled = !(S.view === 'rings' && S.level > 0);
   const hints = [
     'Each arena holds 10 sub-arenas. Every small circle has 10 arcs, one per table: thin and faint = waiting for its bot, red = placing coins (the arc gets thicker as the stack grows), orange = cashed out, bright red = fell. The disc in the middle grows as coins land. Tap an arena to open it.',
@@ -408,6 +412,7 @@ const jitter = (seat: number, salt: number): number => ((Math.imul(seat + salt *
 function hubDraw(ctx: CanvasRenderingContext2D, cx: number, cy: number, hubR: number, line: string): void {
   disc(ctx, cx, cy, hubR); ctx.fillStyle = T.hubFill; ctx.fill();
   ctx.strokeStyle = T.hub; ctx.lineWidth = Math.max(1, hubR * 0.035); ctx.stroke();
+  if (!S.text) return;
   ctx.fillStyle = T.hub; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.font = `bold ${Math.max(7, hubR * 0.2)}px ui-monospace,monospace`;
   const lh = hubR * 0.24;
@@ -469,16 +474,16 @@ function drawStage(rep: TablesReply | null): void {
   }
   // the big stadium circle
   const lw = Math.max(1.5, w * 0.005);
-  disc(ctx, cx, cy, maxR * 1.035); ctx.fillStyle = T.platform; ctx.fill(); ctx.strokeStyle = T.ring; ctx.lineWidth = lw * 1.6; ctx.stroke();
+  disc(ctx, cx, cy, maxR * 1.012); ctx.fillStyle = T.platform; ctx.fill(); ctx.strokeStyle = T.ring; ctx.lineWidth = lw * 1.6; ctx.stroke();
   const ring = ringPositions(cx, cy, maxR, 10);
   let hubLine = '';
-  if (ov && S.level <= 1) { let playing = 0; for (let i = 0; i < 1000; i++) if (cellOf(ov, i).phase === 'play') playing++; hubLine = `${playing} playing \u00b7 next in ${Math.max(0, Math.ceil((S.slotMs - (S.vt % S.slotMs)) / 1000))}s`; }
-  hubDraw(ctx, cx, cy, ring.ringRadius * 0.56, hubLine);
+  if (S.text && ov && S.level <= 1) { let playing = 0; for (let i = 0; i < 1000; i++) if (cellOf(ov, i).phase === 'play') playing++; hubLine = `${playing} playing \u00b7 next in ${Math.max(0, Math.ceil((S.slotMs - (S.vt % S.slotMs)) / 1000))}s`; }
+  hubDraw(ctx, cx, cy, hubRadius(ring), hubLine);
   const labelCol = contrastOn(T.platform);
   const sec = S.vt - (ov?.slotStartMs ?? 0);
   void sec;
   if (S.level === 0) {
-    const lwSeg = Math.max(1, ringPositions(0, 0, ring.circleRadius * 0.86, 10).circleRadius * 0.2);
+    const lwSeg = Math.max(1, ringPositions(0, 0, ring.circleRadius * 0.95, 10).circleRadius * 0.2);
     // one batch of arcs per (kind, thickness bucket), so a whole view needs only a few strokes
     const segs: Record<string, Path2D> = {};
     const seg = (kind: string, b: number): Path2D => (segs[kind + b] ??= new Path2D());
@@ -487,7 +492,7 @@ function drawStage(rep: TablesReply | null): void {
     const arenaPlaying: number[] = [];
     ring.positions.forEach((p, a) => {
       node(ctx, p, lw, T.ring, S.hover === a);
-      const inner = ringPositions(p.x, p.y, p.r * 0.86, 10);
+      const inner = ringPositions(p.x, p.y, p.r * 0.95, 10);
       let playing = 0;
       inner.positions.forEach((q, sb) => {
         const cells: Cell[] = [];
@@ -526,7 +531,7 @@ function drawStage(rep: TablesReply | null): void {
       ctx.strokeStyle = styleOf[kind]!; ctx.stroke(segs[key]!);
     }
     ctx.lineWidth = lwSeg * 2.4; ctx.globalAlpha *= 0.55; ctx.strokeStyle = T.fell; ctx.stroke(flashFell); ctx.strokeStyle = T.cashed; ctx.stroke(flashCash); ctx.globalAlpha /= 0.55;
-    ring.positions.forEach((p, a) => {
+    if (S.text) ring.positions.forEach((p, a) => {
       ctx.fillStyle = labelCol; ctx.globalAlpha *= 0.9; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const dev = p.r / Math.min(2, window.devicePixelRatio || 1);
       ctx.font = `bold ${p.r * (dev >= 36 ? 0.3 : 0.36)}px ui-monospace,monospace`; ctx.fillText(String(a), p.x, p.y - (dev >= 36 ? p.r * 0.07 : 0));
@@ -537,7 +542,7 @@ function drawStage(rep: TablesReply | null): void {
   } else if (S.level === 1) {
     ring.positions.forEach((p, sb) => {
       node(ctx, p, lw, T.ring, S.hover === sb);
-      const inner = ringPositions(p.x, p.y, p.r * 0.88, 10);
+      const inner = ringPositions(p.x, p.y, p.r * 0.95, 10);
       const cells: Cell[] = [];
       inner.positions.forEach((q, t) => {
         const seat = S.arena * 100 + sb * 10 + t;
@@ -547,6 +552,7 @@ function drawStage(rep: TablesReply | null): void {
       });
       const ty = tally(cells);
       const dev = p.r / Math.min(2, window.devicePixelRatio || 1);
+      if (!S.text) return;
       ctx.fillStyle = labelCol; ctx.globalAlpha *= 0.9; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.font = `bold ${p.r * (dev >= 36 ? 0.3 : 0.36)}px ui-monospace,monospace`; ctx.fillText(String(sb), p.x, p.y - (dev >= 36 ? p.r * 0.07 : 0));
       if (dev >= 36) { ctx.font = `${p.r * 0.12}px ui-monospace,monospace`; ctx.fillText(`${ty.play}/10 live`, p.x, p.y + p.r * 0.2); }
@@ -560,10 +566,11 @@ function drawStage(rep: TablesReply | null): void {
       if (plan && rep) { pr = progress(rep, plan); st = stateAt(plan, pr.k); if (!pr.waiting) { if (st.status === 'fell') stroke = T.fell; else if (st.status !== 'active') stroke = T.cashed; } }
       node(ctx, p, lw * 1.2, stroke, S.hover === t);
       if (!plan || !st) return;
-      const R = p.r * 0.66;
-      drawOverheadAt(ctx, st, p.x, p.y - p.r * 0.2, R, pr.since < 1 && !pr.waiting ? pr.since : 1, plan.quality);
+      const R = p.r * (S.text ? 0.66 : 0.84);
+      drawOverheadAt(ctx, st, p.x, p.y - p.r * (S.text ? 0.2 : 0.04), R, pr.since < 1 && !pr.waiting ? pr.since : 1, plan.quality);
       const dev = p.r / Math.min(2, window.devicePixelRatio || 1);
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = labelCol;
+      if (!S.text) { disc(ctx, p.x, p.y + p.r * 0.9, Math.max(2, p.r * 0.06)); ctx.fillStyle = T.bot; ctx.fill(); return; }
       if (dev >= 40) {
         const nf = p.r * 0.14;
         ctx.font = `${nf}px ui-monospace,monospace`;
@@ -576,7 +583,7 @@ function drawStage(rep: TablesReply | null): void {
     });
   }
   ctx.restore();
-  if (rep == null && S.level >= 2) { ctx.fillStyle = T.hub; ctx.textAlign = 'center'; ctx.font = `${w / 30}px ui-monospace,monospace`; ctx.fillText('loading...', cx, cy + w * 0.2); }
+  if (S.text && rep == null && S.level >= 2) { ctx.fillStyle = T.hub; ctx.textAlign = 'center'; ctx.font = `${w / 30}px ui-monospace,monospace`; ctx.fillText('loading...', cx, cy + w * 0.2); }
   void hoverText;
 }
 function stageHit(ev: PointerEvent | MouseEvent): number {
@@ -585,7 +592,7 @@ function stageHit(ev: PointerEvent | MouseEvent): number {
   const x = ((ev.clientX - rect.left) / rect.width) * cv.width, y = ((ev.clientY - rect.top) / rect.height) * cv.width;
   const { cx, cy, maxR } = stageGeom(cv.width);
   const ring = ringPositions(cx, cy, maxR, 10);
-  if (Math.hypot(x - cx, y - cy) < ring.ringRadius * 0.56) return -2; // the hub
+  if (Math.hypot(x - cx, y - cy) < hubRadius(ring)) return -2; // the hub
   return hitRing(ring, x, y);
 }
 function hoverInfo(i: number): string {
@@ -837,10 +844,10 @@ function buildColors(): void {
   $('cReset').onclick = () => { setTheme(DEFAULT_THEME); $('shareMsg').textContent = 'Back to black, white and red.'; };
   $('cClose').onclick = () => toggleColors(false);
   $('cShare').onclick = async () => {
-    const url = `${location.origin}${location.pathname}#${themeToHash(T)}`;
+    const url = `${location.origin}${location.pathname}${withHashParam(withHashParam(location.hash, 'theme', themeToHash(T).slice(6)), 'text', S.text ? null : 'off')}`;
     try { await navigator.clipboard.writeText(url); $('shareMsg').textContent = 'Link copied. Anyone who opens it gets these colours.'; }
     catch { $('shareMsg').textContent = url; }
-    history.replaceState(null, '', '#' + themeToHash(T));
+    history.replaceState(null, '', location.pathname + location.search + withHashParam(location.hash, 'theme', themeToHash(T).slice(6)));
   };
   syncColorInputs();
 }
@@ -870,15 +877,30 @@ function showInfo(): void {
     <p>A coin is 63.5 mm wide. Bots slide each new coin sideways. In <b>single</b> the score is how far (mm) the stack reaches out from the first coin. In <b>twin</b> and <b>triple</b> the stacks must touch each other and the score is the tallest stack in coins (capped at the second tallest plus 10). If the stack tips over it <b>falls</b>.</p>
     <p>Coin quality comes from live CAPH trading volume: at $500 or less coins are lopsided and wobbly, at $100,000 or more they are perfect. Use the volume menu to see what better or worse coins look like.</p>
     <p>Every table close-up is a real engine round. The server sends the seed, the volume and the moves. <b>Your browser replays them with the same engine</b> and checks the result (see "replay check"). The two outer views are a quick live picture made from each table's start time, speed and result, so they are approximate; the table views are exact.</p>
-    <p>Use <b>COLORS</b> to change every colour and save it in this browser.</p>
+    <p>Use <b>COLORS</b> to change every colour and save it in this browser. <b>TEXT: ON/OFF</b> hides every label on the hub, arenas, sub-arenas and tables so only the pure picture shows.</p>
     <p><button onclick="document.getElementById('modal').classList.remove('show')">CLOSE</button></p>`;
   $('modal').classList.add('show');
+}
+/** Show or hide every label drawn on the hub, arenas, sub-arenas and tables. Saved in the browser and in the URL hash. */
+function setText(on: boolean, save = true): void {
+  S.text = on; S.dirty = true; closeKey = '';
+  const b = $('textBtn'); b.textContent = on ? 'TEXT: ON' : 'TEXT: OFF'; b.className = on ? '' : 'on'; b.setAttribute('aria-pressed', String(!on));
+  if (!save) return;
+  try { localStorage.setItem(TEXT_STORE, on ? '1' : '0'); } catch { /* private mode */ }
+  history.replaceState(null, '', location.pathname + location.search + withHashParam(location.hash, 'text', on ? null : 'off'));
+}
+function loadText(): void {
+  let v: boolean | null = textFlagFromHash(location.hash);
+  const fromHash = v !== null;
+  if (v === null) { try { v = textFlagFromStore(localStorage.getItem(TEXT_STORE)); } catch { v = null; } }
+  setText(v ?? true, fromHash);
 }
 function buildFooter(): void {
   $('pause').onclick = () => { S.paused = !S.paused; buildControls(); };
   $('follow').onclick = () => { const e = S.summary?.board[0]; if (e) goSeat(e.seat); };
   $('back').onclick = up;
   $('colorBtn').onclick = () => toggleColors();
+  $('textBtn').onclick = () => setText(!S.text);
   $('info').onclick = showInfo;
   $('modal').onclick = (e) => { if (e.target === $('modal')) $('modal').classList.remove('show'); };
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if ($('modal').classList.contains('show')) $('modal').classList.remove('show'); else if ($('colors').classList.contains('show')) toggleColors(false); else up(); } });
@@ -903,7 +925,7 @@ function startFromHash(): void {
 async function boot(): Promise<void> {
   loadTheme();
   try { S.config = await (await fetch('/demo/config')).json(); S.clockOffset = S.config.serverNow - Date.now(); S.slotMs = S.config.slotMs; } catch { /* use defaults */ }
-  buildControls(); buildGrid(); buildFooter(); buildColors();
+  buildControls(); buildGrid(); buildFooter(); buildColors(); loadText();
   startFromHash();
   buildCrumb(); applyViewClasses();
   refreshSummary();

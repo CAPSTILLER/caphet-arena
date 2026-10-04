@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { FLASH_MS, arcFor, hitRing, liveCell, ringPositions, spotsFor, tally } from '../web/geometry.js';
+import { FLASH_MS, TIGHT, arcFor, hitRing, hubRadius, liveCell, ringPositions, spotsFor, tally } from '../web/geometry.js';
+import { textFlagFromHash, textFlagFromStore, withHashParam } from '../web/prefs.js';
 import {
-  DEFAULT_THEME, PRESETS, THEME_KEYS, coinBase, coinTone, contrastOn, hexToHsl, hslToHex, mixHex, normHex, sameTheme, sanitizeTheme, themeFromHash, themeToHash,
+  DEFAULT_THEME, PRESETS, THEME_KEYS, coinBase, migrateTheme, coinTone, contrastOn, hexToHsl, hslToHex, mixHex, normHex, sameTheme, sanitizeTheme, themeFromHash, themeToHash,
 } from '../web/theme.js';
 import { INDEX_HTML } from '../src/server/web-assets.generated.js';
 
@@ -108,6 +109,64 @@ describe('ring layout and live colours', () => {
     const t = tally([liveCell([0, 1, 1, 1, 0, 3], 99), liveCell([0, 1, 1, 2, 9, 9], 99), liveCell([500, 1, 5, 2, 9, 9], 10), liveCell([0, 1000, 5, 2, 9, 9], 2000)]);
     expect(t).toMatchObject({ fell: 1, cashed: 1, wait: 1, play: 1 });
     expect(tally([]).size).toBe(0);
+  });
+});
+
+describe('tight ring around the hub (the eye)', () => {
+  it('circles touch their neighbours and the hub, with no gap and no overlap', () => {
+    for (const [cx, cy, R] of [[500, 500, 400], [0, 0, 83], [120, 40, 17.5]] as const) {
+      const ring = ringPositions(cx, cy, R, 10);
+      const hub = hubRadius(ring);
+      for (let i = 0; i < 10; i++) {
+        const a = ring.positions[i]!, b = ring.positions[(i + 1) % 10]!;
+        const d = Math.hypot(a.x - b.x, a.y - b.y);
+        expect(d).toBeGreaterThanOrEqual(a.r + b.r); // no overlap
+        expect(d - (a.r + b.r)).toBeLessThanOrEqual(0.011 * d); // gap under 1.1 percent of the spacing
+        const toHub = Math.hypot(a.x - cx, a.y - cy) - a.r - hub;
+        expect(Math.abs(toHub)).toBeLessThan(1e-9); // the hub touches the inside edge exactly
+        expect(Math.hypot(a.x - cx, a.y - cy) + a.r).toBeLessThanOrEqual(R + 1e-9); // stays inside the outer circle
+      }
+    }
+    expect(TIGHT).toBeGreaterThanOrEqual(0.985);
+    expect(TIGHT).toBeLessThan(1);
+  });
+
+  it('the hub is black by default and the old light grey hub moves to black', () => {
+    expect(DEFAULT_THEME.hubFill).toBe('#000000');
+    expect(PRESETS[0]!.theme.hubFill).toBe('#000000');
+    expect(migrateTheme({ ...DEFAULT_THEME, hubFill: '#e6e6e6' }).hubFill).toBe('#000000');
+    expect(migrateTheme({ ...DEFAULT_THEME, hubFill: '#123456' }).hubFill).toBe('#123456'); // a colour picked on purpose is kept
+  });
+});
+
+describe('text on or off', () => {
+  it('reads the switch from the hash and from storage', () => {
+    expect(textFlagFromHash('#text=off')).toBe(false);
+    expect(textFlagFromHash('#go=3.5&text=0')).toBe(false);
+    expect(textFlagFromHash('#theme=bg:000000&text=on')).toBe(true);
+    expect(textFlagFromHash('#go=3')).toBeNull();
+    expect(textFlagFromHash('#text=maybe')).toBeNull();
+    expect(textFlagFromHash('')).toBeNull();
+    expect(textFlagFromStore('0')).toBe(false);
+    expect(textFlagFromStore('1')).toBe(true);
+    expect(textFlagFromStore(null)).toBeNull();
+    expect(textFlagFromStore('x')).toBeNull();
+  });
+
+  it('changes only its own key in the hash', () => {
+    expect(withHashParam('', 'text', 'off')).toBe('#text=off');
+    expect(withHashParam('#go=3.5.2', 'text', 'off')).toBe('#go=3.5.2&text=off');
+    expect(withHashParam('#go=3.5.2&text=off', 'text', null)).toBe('#go=3.5.2');
+    expect(withHashParam('#text=off', 'text', null)).toBe('');
+    expect(withHashParam('#text=off&theme=bg:000000;cq:0', 'text', 'off')).toBe('#theme=bg:000000;cq:0&text=off');
+    // a share link with colours and text off reads back correctly both ways
+    const h = withHashParam('#' + themeToHash(DEFAULT_THEME), 'text', 'off');
+    expect(sameTheme(themeFromHash(h)!, DEFAULT_THEME)).toBe(true);
+    expect(textFlagFromHash(h)).toBe(false);
+  });
+
+  it('the page has the text button', () => {
+    expect(INDEX_HTML).toContain('id="textBtn"');
   });
 });
 

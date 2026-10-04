@@ -1,5 +1,8 @@
 // Ring layouts and overview colours for the arena of arenas. Pure functions, tested without a page.
 
+/** How much of the space between neighbours the circles use. 1 would make them touch exactly, 0.99 keeps them from overlapping. */
+export const TIGHT = 0.99;
+
 export interface RingSlot { x: number; y: number; r: number; angle: number }
 export interface Ring { ringRadius: number; circleRadius: number; positions: RingSlot[] }
 
@@ -7,7 +10,7 @@ export interface Ring { ringRadius: number; circleRadius: number; positions: Rin
 export function ringPositions(cx: number, cy: number, maxRadius: number, count = 10): Ring {
   const sin = Math.sin(Math.PI / count);
   const ringRadius = maxRadius / (1 + sin);
-  const circleRadius = ringRadius * sin * 0.96;
+  const circleRadius = ringRadius * sin * TIGHT;
   const positions: RingSlot[] = [];
   for (let i = 0; i < count; i++) {
     const angle = (i / count) * Math.PI * 2 - Math.PI / 2;
@@ -15,6 +18,9 @@ export function ringPositions(cx: number, cy: number, maxRadius: number, count =
   }
   return { ringRadius, circleRadius, positions };
 }
+
+/** The hub circle that sits in the middle and touches the inside of every circle of the ring. */
+export function hubRadius(ring: Ring): number { return ring.ringRadius - ring.circleRadius; }
 
 /** Which slot is under the point, or -1. */
 export function hitRing(ring: Ring, x: number, y: number): number {

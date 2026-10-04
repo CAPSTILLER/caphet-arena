@@ -22,7 +22,7 @@ export type ThemeColorKey = (typeof THEME_KEYS)[number];
 /** Black background, white platforms, red coins and outlines, yellow-orange hub. This is the default. */
 export const DEFAULT_THEME: Theme = {
   bg: '#000000', text: '#f2f2f2', coin: '#e0182d', coin2: '#6b1a24', coinByQuality: false,
-  platform: '#ffffff', table: '#ffffff', ring: '#e0182d', hub: '#f5a000', hubFill: '#e6e6e6', bot: '#2f6bff', fell: '#ff3b3b', cashed: '#f5a000',
+  platform: '#ffffff', table: '#ffffff', ring: '#e0182d', hub: '#f5a000', hubFill: '#000000', bot: '#2f6bff', fell: '#ff3b3b', cashed: '#f5a000',
 };
 
 export const PRESETS: { id: string; name: string; theme: Theme }[] = [
@@ -127,6 +127,11 @@ export function coinTone(base: string, stackIdx: number, i: number): CoinTone {
 }
 
 // ---- saving and sharing ----------------------------------------------------------------------
+
+/** Old saved themes had a light grey hub fill. Move those to the new black default (only when it is exactly the old default). */
+export function migrateTheme(t: Theme): Theme {
+  return t.hubFill === '#e6e6e6' ? { ...t, hubFill: DEFAULT_THEME.hubFill } : t;
+}
 
 /** Accept anything, keep only valid colours, fill the rest from the default. */
 export function sanitizeTheme(raw: unknown): Theme {
