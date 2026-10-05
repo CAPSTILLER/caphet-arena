@@ -1,4 +1,4 @@
-// Ring layouts and overview colours for the arena of arenas. Pure functions, tested without a page.
+// Ring layouts and overview colors for the arena of arenas. Pure functions, tested without a page.
 
 /** How much of the space between neighbours the circles use. 1 would make them touch exactly, 0.99 keeps them from overlapping. */
 export const TIGHT = 0.99;
@@ -23,49 +23,38 @@ export function ringPositions(cx: number, cy: number, maxRadius: number, count =
 export function hubRadius(ring: Ring): number { return ring.ringRadius - ring.circleRadius; }
 
 export interface HubLayout {
-  /** The slots exactly as ringPositions gives them. Everything drawn inside a slot (nested rings, tables, labels) uses these circles, so contents never change size. */
+  /** The slots: size and position never change with volume. */
   ring: Ring;
-  /** Hub radius for this volume setting. */
-  hubR: number;
-  /** The "petal" behind each slot: a circle of radius petalR centred petalDist from the middle, cut by the straight lines halfway to the neighbours. */
-  petalR: number;
-  petalDist: number;
-  /** The petal also includes the whole pie slice (between the straight lines) out to this distance from the middle, so no gap is left around the hub. Equal to hubR at the biggest hub, petalDist at the smallest. */
-  sectorR: number;
-  cx: number; cy: number;
-  /** Radius of the outer edge of the petals (the same as the outer edge of the ring slots). */
+  /** Outer edge of the hub, always tight against the arenas. */
   outerR: number;
+  /** Inner fill radius. Shrinks as volume rises; the highlight ring fills the rest. */
+  fillR: number;
+  /** Width of the highlight ring (outerR - fillR). */
+  bandW: number;
+  cx: number; cy: number;
 }
 
 /**
- * Layout for a hub that shrinks with coin volume. t is 0 to 1 (0: the hub is as big as the tight ring allows, 1: the hub is about the size of one slot circle).
- * Ten equal circles cannot grow and stay both tight to a smaller hub and apart from each other inside the same outer edge, so each slot's
- * backdrop becomes a petal: a bigger circle that touches the hub, cut by straight lines halfway to its neighbours (so petals touch and never overlap).
- * At t = 0 the petal is exactly today's circle. The slot circle itself (ring) never changes.
+ * Hub layout for a given volume setting. t is 0 to 1 on the same log scale as coin quality.
+ * At t = 0 the highlight ring is thin and the fill is almost the whole hub (looks like before).
+ * At t = 1 the fill is about one arena circle and the rest of the hub radius is the thick highlight ring.
+ * Arenas keep their size and position; only the ring band inside the hub grows inward.
  */
 export function hubLayout(cx: number, cy: number, maxRadius: number, t: number, count = 10): HubLayout {
   const ring = ringPositions(cx, cy, maxRadius, count);
   const k = Math.max(0, Math.min(1, Number.isFinite(t) ? t : 0));
-  const hub0 = hubRadius(ring);
-  const outerR = ring.ringRadius + ring.circleRadius;
-  const hubR = hub0 + (ring.circleRadius - hub0) * k;
-  const petalR = (outerR - hubR) / 2;
-  const petalDist = hubR + petalR;
-  return { ring, hubR, petalR, petalDist, sectorR: hubR + k * (petalDist - hubR), cx, cy, outerR };
+  const outerR = hubRadius(ring);
+  const thin = Math.max(1.5, outerR * 0.04); // the thin ring you see at low volume
+  const fill0 = outerR - thin;
+  const fill1 = ring.circleRadius; // about one arena circle
+  const fillR = fill0 + (fill1 - fill0) * k;
+  return { ring, outerR, fillR, bandW: outerR - fillR, cx, cy };
 }
 
-/** Which slot is under the point of a hub layout: -2 for the hub, -1 for nothing, else the slot. */
+/** Which slot is under the point: -2 for the hub (any part of the outer disc), -1 for nothing, else the slot. */
 export function hitLayout(l: HubLayout, x: number, y: number): number {
-  const dx = x - l.cx, dy = y - l.cy;
-  const d = Math.hypot(dx, dy);
-  if (d < l.hubR) return -2;
-  const n = l.ring.positions.length;
-  const a = Math.atan2(dy, dx) + Math.PI / 2; // 0 at 12 o'clock
-  const i = (((Math.round((a / (Math.PI * 2)) * n) % n) + n) % n);
-  const ang = l.ring.positions[i]!.angle;
-  const px = l.cx + Math.cos(ang) * l.petalDist, py = l.cy + Math.sin(ang) * l.petalDist;
-  if (d <= l.sectorR) return i;
-  return Math.hypot(x - px, y - py) <= l.petalR ? i : -1;
+  if (Math.hypot(x - l.cx, y - l.cy) < l.outerR) return -2;
+  return hitRing(l.ring, x, y);
 }
 
 /** Which slot is under the point, or -1. */
@@ -98,7 +87,7 @@ const NOT_STARTED: Cell = { phase: 'wait', coins: 0, coinsF: 0, size: 0, sinceMo
 /**
  * What one table looks like at this moment, from the compact overview row
  * [startDelayMs, stepMs, moves, end, score, coinsOnTable] (end: 1 fell, 2 cashed out, 3 stacks connected).
- * This is only for colouring and animating the overview. Table close-ups are replayed exactly by the engine.
+ * This is only for coloring and animating the overview. Table close-ups are replayed exactly by the engine.
  */
 export function liveCell(row: readonly number[] | undefined, sinceSlotStartMs: number): Cell {
   if (!row) return NOT_STARTED;

@@ -2,7 +2,7 @@
 import { cashOut, createRound, placeCoin } from '../src/engine.js';
 import type { Mode, Move, RoundState } from '../src/types.js';
 import { qualityFromVolume } from '../src/quality.js';
-import { type Cell, type HubLayout, arcFor, hitLayout, hubLayout, liveCell, ringPositions, spotsFor, tally } from './geometry.js';
+import { type Cell, arcFor, hitLayout, hubLayout, liveCell, ringPositions, spotsFor, tally } from './geometry.js';
 import { textFlagFromHash, textFlagFromStore, withHashParam } from './prefs.js';
 import {
   DEFAULT_THEME, PRESETS, migrateTheme, type Theme, type ThemeColorKey, THEME_KEYS, coinBase, coinTone, contrastOn, mixHex, normHex, randomTheme, rgba, sameTheme, sanitizeTheme, themeFromHash, themeToHash,
@@ -425,22 +425,23 @@ function afterSelect(): void { lastOv = null; S.table = Math.min(S.table, 9); bu
 const jitter = (seat: number, salt: number): number => ((Math.imul(seat + salt * 977, 2654435761) >>> 0) % 1000) / 500 - 1; // -1..1, steady per seat
 
 /**
- * The text inside the Collection Center Hub. Every line is measured and shrunk until it fits inside the circle
- * (with a margin inside the outline), at any hub size. The small line is shortened, and dropped if it would be too tiny to read.
+ * The Collection Center Hub. Outer edge stays tight against the arenas; the highlight ring
+ * (Hub text and highlights color) grows thicker inward as volume rises, and the fill circle shrinks.
+ * Hub text is always fitted inside the inner fill (shrink, drop the small line, or hide).
  */
-function hubDraw(ctx: CanvasRenderingContext2D, cx: number, cy: number, hubR: number, lines: string[]): void {
-  const bw = Math.max(1.5, hubR * 0.04);
-  banded(ctx, cx, cy, hubR, T.hubFill, T.hub, bw);
+function hubDraw(ctx: CanvasRenderingContext2D, cx: number, cy: number, outerR: number, fillR: number, lines: string[]): void {
+  // draw without the usual banded width cap so the highlight ring can grow all the way in to fillR
+  disc(ctx, cx, cy, outerR); ctx.fillStyle = T.hub; ctx.fill();
+  disc(ctx, cx, cy, Math.max(0, fillR)); ctx.fillStyle = T.hubFill; ctx.fill();
   if (!S.text) return;
   const cssPx = (ctx.canvas.clientWidth || ctx.canvas.width) / ctx.canvas.width; // css pixels per canvas pixel
   const minFont = 6 / cssPx; // smallest readable text, in canvas pixels
-  const inner = hubR - bw - hubR * 0.06;
+  const inner = Math.max(0, fillR - fillR * 0.06);
   const FONT = (px: number, bold: boolean): string => `${bold ? 'bold ' : ''}${px}px ui-monospace,monospace`;
-  /** Largest font (up to `want`) at which `text`, centred at height y, stays inside the circle. 0 if it would be below the readable minimum. */
+  /** Largest font (up to `want`) at which `text`, centred at height y, stays inside the fill. 0 if below the readable minimum. */
   const fitFont = (text: string, y: number, want: number, bold: boolean): number => {
     ctx.font = FONT(100, bold);
-    const per = ctx.measureText(text).width / 100; // width per pixel of font size
-    // the text box is about 1.2 font sizes tall; its corners farthest from the middle decide the chord
+    const per = ctx.measureText(text).width / 100;
     let f = want;
     for (let i = 0; i < 24; i++) {
       const farY = Math.abs(y) + f * 0.6;
@@ -452,14 +453,12 @@ function hubDraw(ctx: CanvasRenderingContext2D, cx: number, cy: number, hubR: nu
   };
   ctx.fillStyle = T.hub; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   const title = ['COLLECTION', 'CENTER', 'HUB'];
-  const want = hubR * 0.2, lh = hubR * 0.24;
-  // the small line: try each wording (longest first), keep the first one that fits at a readable size
+  const want = fillR * 0.2, lh = fillR * 0.24;
   let small = '', smallF = 0;
   const smallY = lh * 1.75;
-  for (const cand of lines) { const f = fitFont(cand, smallY, Math.max(minFont, hubR * 0.13), false); if (f > 0) { small = cand; smallF = f; break; } }
-  const shift = small ? 0 : lh * 0.3; // centred again when the small line is dropped
+  for (const cand of lines) { const f = fitFont(cand, smallY, Math.max(minFont, fillR * 0.13), false); if (f > 0) { small = cand; smallF = f; break; } }
+  const shift = small ? 0 : lh * 0.3;
   const ys = [-lh * 1.2 + shift, -lh * 0.2 + shift, lh * 0.8 + shift];
-  // all three words share one size so they look like one block; if they cannot be read at that size, no text is drawn
   const sizes = title.map((t, i) => fitFont(t, ys[i]!, want, true));
   if (sizes.some((f) => f <= 0)) return;
   const tf = Math.min(...sizes);
@@ -467,34 +466,10 @@ function hubDraw(ctx: CanvasRenderingContext2D, cx: number, cy: number, hubR: nu
   title.forEach((t, i) => ctx.fillText(t, cx, cy + ys[i]!));
   if (small) { ctx.font = FONT(smallF, false); ctx.globalAlpha *= 0.85; ctx.fillText(small, cx, cy + smallY); ctx.globalAlpha /= 0.85; }
 }
-/** The current hub layout (set at the start of every stage draw). Slot circles stay the size they always were; the petal behind each one grows as the hub shrinks. */
-let LAY: HubLayout | null = null;
-/** A slot's backdrop: a circle (the petal) cut by the straight lines halfway to its neighbours, with a solid band inside its edge. At the biggest hub it is exactly the plain circle. */
-function node(ctx: CanvasRenderingContext2D, i: number, lw: number, stroke: string, hot: boolean, fill: string): void {
-  const L = LAY!;
-  const ang = L.ring.positions[i]!.angle;
-  const px = L.cx + Math.cos(ang) * L.petalDist, py = L.cy + Math.sin(ang) * L.petalDist;
-  const bw = Math.min(hot ? lw * 1.8 : lw, L.petalR * 0.45);
-  const band = hot ? T.hub : stroke;
-  const half = Math.PI / L.ring.positions.length;
-  const wedge = (shift: number): void => {
-    // apex moved out along the middle line by shift / sin(half) so every side line moves in by `shift`
-    const ax = L.cx + Math.cos(ang) * (shift / Math.sin(half)), ay = L.cy + Math.sin(ang) * (shift / Math.sin(half));
-    const len = L.outerR * 1.5 / Math.cos(half);
-    ctx.beginPath(); ctx.moveTo(ax, ay);
-    ctx.lineTo(ax + Math.cos(ang - half) * len, ay + Math.sin(ang - half) * len);
-    ctx.lineTo(ax + Math.cos(ang + half) * len, ay + Math.sin(ang + half) * len);
-    ctx.closePath(); ctx.clip();
-  };
-  // the petal is its circle plus the pie slice next to the hub (so the hub is wrapped with no gap when it is small)
-  const shape = (inset: number): void => {
-    ctx.beginPath();
-    ctx.arc(px, py, Math.max(0, L.petalR - inset), 0, Math.PI * 2);
-    ctx.moveTo(L.cx + L.sectorR, L.cy); ctx.arc(L.cx, L.cy, L.sectorR, 0, Math.PI * 2);
-  };
-  ctx.save(); wedge(0); shape(0); ctx.fillStyle = band; ctx.fill(); ctx.restore();
-  // neighbours each take half the band along the shared straight sides, so those sides end up one band wide in total
-  ctx.save(); wedge(bw / 2); shape(bw); ctx.fillStyle = fill; ctx.fill(); ctx.restore();
+
+/** A slot circle with a solid outline band on the inside of its edge. Size and position never change with volume. */
+function node(ctx: CanvasRenderingContext2D, p: { x: number; y: number; r: number }, lw: number, stroke: string, hot: boolean, fill: string): void {
+  banded(ctx, p.x, p.y, p.r, fill, hot ? T.hub : stroke, hot ? lw * 1.8 : lw);
 }
 /** One table as a small circle with its live stack spots (1 for single, 2 for twin, 3 for triple). */
 function tableDot(ctx: CanvasRenderingContext2D, q: { x: number; y: number; r: number }, c: Cell, seat: number, base: string): void {
@@ -525,13 +500,13 @@ function currentOverview(): Overview | null {
 }
 const cellOf = (ov: Overview | null, seat: number): Cell => liveCell(ov?.seats[seat], ov ? S.vt - ov.slotStartMs : -1);
 
-/** The coin volume that sets the hub size: the what-if choice, else the live CAPH volume. */
+/** The coin volume that sets the hub ring thickness: the what-if choice, else the live CAPH volume. */
 function hubVolume(ov: Overview | null): number {
   if (S.vol !== 'live') return Number(S.vol) || 0;
   const live = S.summary?.liveVolumeUsd ?? S.summary?.volumeUsd ?? ov?.volumeUsd;
   return Number.isFinite(live) ? Number(live) : 0;
 }
-/** Move the shown hub size toward the size for this volume (same log scale as coin quality), easing over about half a second. */
+/** Move the shown hub-ring thickness toward the setting for this volume (same log scale as coin quality), easing over about half a second. */
 function stepHub(target: number): number {
   const now = performance.now();
   const dt = S.hubStamp ? Math.min(250, now - S.hubStamp) : 0;
@@ -569,7 +544,6 @@ function drawStage(rep: TablesReply | null): void {
   const lw = Math.max(1.5, w * 0.005);
   banded(ctx, cx, cy, maxR * 1.012, S.level === 0 ? T.platform : S.level === 1 ? T.arena : T.subarena, T.ring, lw * 1.6);
   const lay = hubLayout(cx, cy, maxR, stepHub(qualityFromVolume(hubVolume(ov))));
-  LAY = lay;
   const ring = lay.ring;
   let hubLines: string[] = [];
   if (S.text && ov && S.level <= 1) { let playing = 0; for (let i = 0; i < 1000; i++) if (cellOf(ov, i).phase === 'play') playing++; hubLines = [`${playing} playing \u00b7 next in ${Math.max(0, Math.ceil((S.slotMs - (S.vt % S.slotMs)) / 1000))}s`, `${playing} playing`]; }
@@ -585,7 +559,7 @@ function drawStage(rep: TablesReply | null): void {
     const live: { x: number; y: number; r: number; ty: ReturnType<typeof tally> }[] = [];
     const arenaPlaying: number[] = [];
     ring.positions.forEach((p, a) => {
-      node(ctx, a, lw, T.ring, S.hover === a, T.arena);
+      node(ctx, p, lw, T.ring, S.hover === a, T.arena);
       const inner = ringPositions(p.x, p.y, p.r - lw, 10);
       let playing = 0;
       inner.positions.forEach((q, sb) => {
@@ -597,7 +571,7 @@ function drawStage(rep: TablesReply | null): void {
         const bq = Math.max(0.7, q.r * 0.09);
         banded(ctx, q.x, q.y, q.r, T.subarena, T.ring, bq);
         if (ty.flash > 0.02 && (ty.fell || ty.cashed)) { disc(ctx, q.x, q.y, q.r - bq); ctx.fillStyle = rgba(ty.fell ? T.fell : T.cashed, 0.5 * ty.flash); ctx.fill(); }
-        // the tables' track: a ring in the table colour that the 10 table arcs sit on
+        // the tables' track: a ring in the table color that the 10 table arcs sit on
         ctx.beginPath(); ctx.arc(q.x, q.y, q.r * 0.74, 0, Math.PI * 2); ctx.lineWidth = lwSeg * 1.5; ctx.strokeStyle = T.table; ctx.stroke();
         const rd = q.r * (0.14 + 0.36 * ty.size) * (1 + 0.18 * ty.pulse);
         disc(ctx, q.x, q.y, rd); ctx.fillStyle = mixHex(T.subarena, base, Math.min(1, 0.35 + ty.size)); ctx.fill();
@@ -637,7 +611,7 @@ function drawStage(rep: TablesReply | null): void {
     void live;
   } else if (S.level === 1) {
     ring.positions.forEach((p, sb) => {
-      node(ctx, sb, lw, T.ring, S.hover === sb, T.subarena);
+      node(ctx, p, lw, T.ring, S.hover === sb, T.subarena);
       const inner = ringPositions(p.x, p.y, p.r - lw, 10);
       const cells: Cell[] = [];
       inner.positions.forEach((q, t) => {
@@ -660,7 +634,7 @@ function drawStage(rep: TablesReply | null): void {
       let stroke = T.ring;
       let st: RoundState | null = null; let pr = { k: 0, waiting: true, since: 1 };
       if (plan && rep) { pr = progress(rep, plan); st = stateAt(plan, pr.k); if (!pr.waiting) { if (st.status === 'fell') stroke = T.fell; else if (st.status !== 'active') stroke = T.cashed; } }
-      node(ctx, t, lw * 1.2, stroke, S.hover === t, T.table);
+      node(ctx, p, lw * 1.2, stroke, S.hover === t, T.table);
       if (!plan || !st) return;
       const R = p.r * (S.text ? 0.66 : 0.84);
       drawOverheadAt(ctx, st, p.x, p.y - p.r * (S.text ? 0.2 : 0.04), R, pr.since < 1 && !pr.waiting ? pr.since : 1, plan.quality, false);
@@ -676,8 +650,9 @@ function drawStage(rep: TablesReply | null): void {
       ctx.fillText(scoreText(plan, st, pr.waiting), p.x, p.y + p.r * 0.82);
     });
   }
-  document.documentElement.dataset.hubR = lay.hubR.toFixed(1);
-  hubDraw(ctx, cx, cy, lay.hubR, hubLines);
+  document.documentElement.dataset.hubR = lay.fillR.toFixed(1);
+  document.documentElement.dataset.hubOuter = lay.outerR.toFixed(1);
+  hubDraw(ctx, cx, cy, lay.outerR, lay.fillR, hubLines);
   ctx.restore();
   if (S.text && rep == null && S.level >= 2) { ctx.fillStyle = T.hub; ctx.textAlign = 'center'; ctx.font = `${w / 30}px ui-monospace,monospace`; ctx.fillText('loading...', cx, cy + w * 0.2); }
   void hoverText;
@@ -784,7 +759,7 @@ function legendHtml(): string {
     <div>${chip(`background:${T.arena};border:2px solid ${T.ring}`)} an arena (10 sub-arenas)</div>
     <div>${chip(`background:${T.subarena};border:2px solid ${T.ring}`)} a sub-arena (10 tables)</div>
     <div>${chip(`background:${T.table};border:2px solid ${T.ring}`)} a table</div>
-    <div>${chip(`background:${T.subarena};border:3px dotted ${b}`)} ring of 10 arcs, one per table. Faint = waiting. Coin colour = placing coins (thicker arc = taller stack). Cashed colour = cashed out. Fell colour = fell</div>
+    <div>${chip(`background:${T.subarena};border:3px dotted ${b}`)} ring of 10 arcs, one per table. Faint = waiting. Coin color = placing coins (thicker arc = taller stack). Cashed color = cashed out. Fell color = fell</div>
     <div>${chip(`background:${T.subarena};border:2px solid ${T.hub};box-shadow:0 0 6px ${T.hub}`)} bright flash: a coin just landed</div>
   </div>`;
 }
@@ -805,14 +780,14 @@ function renderRight(rep: TablesReply | null): void {
     root.innerHTML = `<h3>SUB-ARENA ${S.arena}.${S.sub}</h3><ul class="tlist">${rep.tables.map((plan, i) => {
       const { k, waiting } = progress(rep, plan); const st = stateAt(plan, k); const s = status(plan, st, waiting);
       return `<li data-t="${i}"><span class="nm">${esc(plan.botName)}</span><span class="badge ${s.cls}">${s.text}</span><span class="score" style="font-size:13px">${scoreText(plan, st, waiting)}</span></li>`;
-    }).join('')}</ul><h3 style="margin-top:14px">HOW TO READ THE COLOURS</h3>${legendHtml()}`;
+    }).join('')}</ul><h3 style="margin-top:14px">HOW TO READ THE COLORS</h3>${legendHtml()}`;
     return;
   }
   const key = `L${S.level}|${S.arena}|${T.coin}|${T.fell}|${T.platform}|${T.arena}|${T.subarena}|${T.table}|${T.cashed}|${T.ring}|${T.sheenOn}|${T.sheen}`;
   if (key === rightKey) return;
   rightKey = key; lastFocusKey = '';
   root.innerHTML = `<h3>${S.level === 0 ? 'ARENA OF ARENAS' : 'ARENA ' + S.arena}</h3>
-    <p style="margin:0 0 10px;color:var(--dim)">${S.level === 0 ? '10 arenas, each with 10 sub-arenas, each with 10 tables: 1,000 tables, every seat held by a house bot. Rounds start at different moments in each minute, so the rings fill up, then settle, then restart.' : 'Each circle is a sub-arena. The small dots inside are its 10 tables.'} Colours update live.</p>
+    <p style="margin:0 0 10px;color:var(--dim)">${S.level === 0 ? '10 arenas, each with 10 sub-arenas, each with 10 tables: 1,000 tables, every seat held by a house bot. Rounds start at different moments in each minute, so the rings fill up, then settle, then restart.' : 'Each circle is a sub-arena. The small dots inside are its 10 tables.'} Colors update live.</p>
     ${legendHtml()}<p style="margin:12px 0 0;color:var(--dim)">Open the table close-up for the exact stack and a replay check.</p>`;
 }
 
@@ -894,7 +869,7 @@ function goSeat(seat: number): void {
   else { S.arena = a; S.sub = s; S.table = t; buildControls(); buildCrumb(); syncSel(); lastFocusKey = ''; }
 }
 
-// ---- colour panel ------------------------------------------------------------------------------------
+// ---- color panel ------------------------------------------------------------------------------------
 const LEVEL_ROWS: { key: ThemeColorKey; label: string; hint: string }[] = [
   { key: 'arena', label: 'Main arena color', hint: 'the 10 big arena circles' },
   { key: 'subarena', label: 'Sub-arena color', hint: 'the circles inside an arena, and the slab under a table close-up' },
@@ -903,7 +878,7 @@ const LEVEL_ROWS: { key: ThemeColorKey; label: string; hint: string }[] = [
 const COLOR_ROWS: { key: ThemeColorKey; label: string; hint: string }[] = [
   { key: 'bg', label: 'Background', hint: 'behind everything' },
   { key: 'text', label: 'Text', hint: 'words and numbers' },
-  { key: 'coin', label: 'Coin color', hint: 'the solid colour of every coin' },
+  { key: 'coin', label: 'Coin color', hint: 'the solid color of every coin' },
   { key: 'sheen', label: 'Sheen', hint: 'laid over each coin at 25% when Add sheen is on' },
   { key: 'platform', label: 'Platform (big circle)', hint: 'the big circle behind the 10 arenas' },
   { key: 'ring', label: 'Rings and outlines', hint: 'circle edges' },
@@ -918,8 +893,8 @@ function buildColors(): void {
     <div class="sec">PRESETS</div><div id="presets"></div>
     <div class="sec">LEVELS</div><div id="lrows"></div>
     <div class="sec">COINS</div>
-    <div class="crow"><label for="shOn">Add sheen<small>lay the Sheen colour over each coin at 25%</small></label><input type="checkbox" id="shOn"></div>
-    <div class="sec">COLOURS</div><div id="crows"></div>
+    <div class="crow"><label for="shOn">Add sheen<small>lay the Sheen color over each coin at 25%</small></label><input type="checkbox" id="shOn"></div>
+    <div class="sec">COLORS</div><div id="crows"></div>
     <div class="btns"><button id="cShare">COPY SHARE LINK</button><button id="cReset">RESET</button></div>
     <div id="shareMsg"></div>`;
   const pr = $('presets');
@@ -931,8 +906,8 @@ function buildColors(): void {
     pr.appendChild(b);
   });
   const rnd = document.createElement('button');
-  rnd.id = 'cRandom'; rnd.textContent = 'RANDOM'; rnd.title = 'Pick every colour at random (press again for another)';
-  rnd.onclick = () => { setTheme(randomTheme(Math.random)); $('shareMsg').textContent = 'Random colours. Press RANDOM again for another set, or RESET to go back.'; };
+  rnd.id = 'cRandom'; rnd.textContent = 'RANDOM'; rnd.title = 'Pick every color at random (press again for another)';
+  rnd.onclick = () => { setTheme(randomTheme(Math.random)); $('shareMsg').textContent = 'Random colors. Press RANDOM again for another set, or RESET to go back.'; };
   pr.appendChild(rnd);
   const addRow = (rows: HTMLElement, r: { key: ThemeColorKey; label: string; hint: string }): void => {
     const d = document.createElement('div');
@@ -950,7 +925,7 @@ function buildColors(): void {
   $('cClose').onclick = () => toggleColors(false);
   $('cShare').onclick = async () => {
     const url = `${location.origin}${location.pathname}${withHashParam(withHashParam(location.hash, 'theme', themeToHash(T).slice(6)), 'text', S.text ? null : 'off')}`;
-    try { await navigator.clipboard.writeText(url); $('shareMsg').textContent = 'Link copied. Anyone who opens it gets these colours.'; }
+    try { await navigator.clipboard.writeText(url); $('shareMsg').textContent = 'Link copied. Anyone who opens it gets these colors.'; }
     catch { $('shareMsg').textContent = url; }
     history.replaceState(null, '', location.pathname + location.search + withHashParam(location.hash, 'theme', themeToHash(T).slice(6)));
   };
@@ -982,7 +957,7 @@ function showInfo(): void {
     <p>A coin is 63.5 mm wide. Bots slide each new coin sideways. In <b>single</b> the score is how far (mm) the stack reaches out from the first coin. In <b>twin</b> and <b>triple</b> the stacks must touch each other and the score is the tallest stack in coins (capped at the second tallest plus 10). If the stack tips over it <b>falls</b>.</p>
     <p>Coin quality comes from live CAPH trading volume: at $500 or less coins are lopsided and wobbly, at $100,000 or more they are perfect. Use the volume menu to see what better or worse coins look like.</p>
     <p>Every table close-up is a real engine round. The server sends the seed, the volume and the moves. <b>Your browser replays them with the same engine</b> and checks the result (see "replay check"). The two outer views are a quick live picture made from each table's start time, speed and result, so they are approximate; the table views are exact.</p>
-    <p>Use <b>COLORS</b> to change every colour and save it in this browser. <b>TEXT: ON/OFF</b> hides every label on the hub, arenas, sub-arenas and tables so only the pure picture shows.</p>
+    <p>Use <b>COLORS</b> to change every color and save it in this browser. <b>TEXT: ON/OFF</b> hides every label on the hub, arenas, sub-arenas and tables so only the pure picture shows.</p>
     <p><button onclick="document.getElementById('modal').classList.remove('show')">CLOSE</button></p>`;
   $('modal').classList.add('show');
 }

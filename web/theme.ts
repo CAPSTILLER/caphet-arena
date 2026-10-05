@@ -1,9 +1,9 @@
-// Colours for the viewer. Pure functions only (no page access) so they can be tested.
+// Colors for the viewer. Pure functions only (no page access) so they can be tested.
 
 export interface Theme {
   bg: string; // page background
   text: string; // text
-  coin: string; // the solid coin colour (and the main accent of the stacks)
+  coin: string; // the solid coin color (and the main accent of the stacks)
   sheen: string; // laid over every coin at 25% opacity when sheenOn is true
   sheenOn: boolean;
   platform: string; // the big circle behind the ring of 10 arenas (the top level backdrop)
@@ -50,7 +50,7 @@ export const PRESETS: { id: string; name: string; theme: Theme }[] = [
   },
 ];
 
-// ---- colour helpers ------------------------------------------------------------------------
+// ---- color helpers ------------------------------------------------------------------------
 
 export function normHex(v: unknown): string | null {
   if (typeof v !== 'string') return null;
@@ -107,20 +107,20 @@ export function luminance(hex: string): number {
   const [r, g, b] = hexToRgb(hex);
   return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
 }
-/** Black or white, whichever reads better on this colour. */
+/** Black or white, whichever reads better on this color. */
 export function contrastOn(hex: string): string { return luminance(hex) > 0.4 ? '#111111' : '#f5f5f5'; }
 
-// ---- coin colours ---------------------------------------------------------------------------
+// ---- coin colors ---------------------------------------------------------------------------
 
-/** Share of the sheen colour laid over a coin when sheen is on. */
+/** Share of the sheen color laid over a coin when sheen is on. */
 export const SHEEN_ALPHA = 0.25;
-/** The coin colour as shown on flat discs (the solid colour, with the sheen laid over it at 25% when sheen is on). */
+/** The coin color as shown on flat discs (the solid color, with the sheen laid over it at 25% when sheen is on). */
 export function coinBase(t: Theme): string {
   return t.sheenOn ? mixHex(t.coin, t.sheen, SHEEN_ALPHA) : t.coin;
 }
 export interface CoinTone { light: string; dark: string; edge: string; ring: string }
 const STACK_HUE_SHIFT = [0, 26, -26];
-/** Colours for one coin. i is its height in the stack (higher coins are a little lighter). */
+/** Colors for one coin. i is its height in the stack (higher coins are a little lighter). */
 export function coinTone(base: string, stackIdx: number, i: number, sheen: string | null = null): CoinTone {
   const t = coinToneSolid(base, stackIdx, i);
   if (!sheen) return t;
@@ -149,13 +149,13 @@ export function migrateTheme(t: Theme): Theme {
   return out;
 }
 
-/** Accept anything, keep only valid colours, fill the rest from the default. */
+/** Accept anything, keep only valid colors, fill the rest from the default. */
 export function sanitizeTheme(raw: unknown): Theme {
   const out: Theme = { ...DEFAULT_THEME };
   if (!raw || typeof raw !== 'object') return out;
   const o = raw as Record<string, unknown>;
   for (const k of THEME_KEYS) { const h = normHex(o[k]); if (h) out[k] = h; }
-  // themes saved before the three level colours existed: arena = the old platform, sub-arena = a step toward the text side of it
+  // themes saved before the three level colors existed: arena = the old platform, sub-arena = a step toward the text side of it
   if (!normHex(o.arena)) out.arena = normHex(o.platform) ?? DEFAULT_THEME.arena;
   if (!normHex(o.subarena)) {
     const base = normHex(o.platform) ?? DEFAULT_THEME.platform;
@@ -180,7 +180,7 @@ export function themeFromHash(hash: string): Theme | null {
     const [k, v] = part.split(':');
     if (!k || v === undefined) continue;
     if (k === 'sh') raw.sheenOn = v === '1';
-    else if (k === 'cq' || k === 'coin2' || k === 'bot') continue; // old links: coin colouring by quality and bot discs no longer exist; the single coin colour is kept, sheen off
+    else if (k === 'cq' || k === 'coin2' || k === 'bot') continue; // old links: coin coloring by quality and bot discs no longer exist; the single coin color is kept, sheen off
     else raw[k] = '#' + v;
   }
   return sanitizeTheme(raw);
@@ -189,14 +189,14 @@ export function sameTheme(a: Theme, b: Theme): boolean {
   return THEME_KEYS.every((k) => a[k] === b[k]) && a.sheenOn === b.sheenOn;
 }
 
-// ---- random colours -------------------------------------------------------------------------------
+// ---- random colors -------------------------------------------------------------------------------
 
-/** WCAG style contrast ratio between two colours, 1 (same) to 21 (black on white). */
+/** WCAG style contrast ratio between two colors, 1 (same) to 21 (black on white). */
 export function contrastRatio(a: string, b: string): number {
   const la = luminance(a), lb = luminance(b);
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
-/** Move a colour's lightness (keeping hue and saturation) until it has at least `min` contrast against every colour in `against`. */
+/** Move a color's lightness (keeping hue and saturation) until it has at least `min` contrast against every color in `against`. */
 export function fitContrast(hex: string, against: string[], min: number): string {
   const ok = (c: string): boolean => against.every((a) => contrastRatio(c, a) >= min);
   if (ok(hex)) return hex;
@@ -216,9 +216,9 @@ export function fitContrast(hex: string, against: string[], min: number): string
 }
 
 /**
- * A random theme. All colours are picked at once. The page is dark or light, the platform, arena, sub-arena and
- * table colours are four clearly different steps, and text, coins, rings, hub, bot and marks are fitted for contrast
- * against the colours they sit on. `rng` returns numbers from 0 up to (not including) 1.
+ * A random theme. All colors are picked at once. The page is dark or light, the platform, arena, sub-arena and
+ * table colors are four clearly different steps, and text, coins, rings, hub and marks are fitted for contrast
+ * against the colors they sit on. `rng` returns numbers from 0 up to (not including) 1.
  */
 export function randomTheme(rng: () => number = Math.random): Theme {
   const r = (a: number, b: number): number => a + (b - a) * rng();
@@ -239,7 +239,7 @@ export function randomTheme(rng: () => number = Math.random): Theme {
     const accent = hue + 180 + r(-60, 60);
     const mid = (a: number, b: number): number => (dark ? b : a);
     const coin = fitContrast(hslToHex(accent, r(70, 95), dark ? r(52, 64) : r(38, 48)), [table], 3);
-    // sheen: random on or off and a random colour; when on, the coin as shown must still stand out from the table
+    // sheen: random on or off and a random color; when on, the coin as shown must still stand out from the table
     let sheen = hslToHex(r(0, 360), r(40, 90), dark ? r(60, 85) : r(45, 75));
     let sheenOn = rng() < 0.5;
     for (let k = 0; sheenOn && contrastRatio(mixHex(coin, sheen, SHEEN_ALPHA), table) < 3; k++) { if (k >= 4) sheenOn = false; else sheen = mixHex(sheen, coin, 0.5); }

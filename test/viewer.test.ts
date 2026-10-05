@@ -7,13 +7,13 @@ import {
 import { qualityFromVolume } from '../src/quality.js';
 import { INDEX_HTML } from '../src/server/web-assets.generated.js';
 
-describe('colour themes', () => {
+describe('color themes', () => {
   it('the default is black background, white platforms, red coins and outlines, yellow-orange hub', () => {
     expect(DEFAULT_THEME).toMatchObject({ bg: '#000000', platform: '#ffffff', coin: '#e0182d', ring: '#e0182d', hub: '#f5a000' });
     expect(PRESETS[0]!.theme).toEqual(DEFAULT_THEME);
   });
 
-  it('every preset is made only of valid colours', () => {
+  it('every preset is made only of valid colors', () => {
     expect(PRESETS.length).toBeGreaterThanOrEqual(5);
     for (const p of PRESETS) for (const k of THEME_KEYS) expect(normHex(p.theme[k]), `${p.id}.${k}`).toBe(p.theme[k]);
   });
@@ -45,7 +45,7 @@ describe('colour themes', () => {
     expect(sanitizeTheme(null)).toEqual(DEFAULT_THEME);
   });
 
-  it('colour maths behaves', () => {
+  it('color maths behaves', () => {
     expect(mixHex('#000000', '#ffffff', 0.5)).toBe('#808080');
     expect(mixHex('#102030', '#ffffff', 0)).toBe('#102030');
     expect(contrastOn('#ffffff')).toBe('#111111');
@@ -54,7 +54,7 @@ describe('colour themes', () => {
     expect(hslToHex(h, s, l)).toBe('#e0182d');
   });
 
-  it('coins: one solid colour, higher coins a little lighter, sheen off by default', () => {
+  it('coins: one solid color, higher coins a little lighter, sheen off by default', () => {
     expect(DEFAULT_THEME.sheenOn).toBe(false);
     expect(coinBase(DEFAULT_THEME)).toBe(DEFAULT_THEME.coin);
     const low = hexToHsl(coinTone(DEFAULT_THEME.coin, 0, 0).dark)[2];
@@ -63,7 +63,7 @@ describe('colour themes', () => {
     expect(coinTone(DEFAULT_THEME.coin, 1, 3).dark).not.toBe(coinTone(DEFAULT_THEME.coin, 0, 3).dark); // stacks 2 and 3 are tinted apart
   });
 
-  it('sheen lays the sheen colour over each coin at 25% and keeps the shading', () => {
+  it('sheen lays the sheen color over each coin at 25% and keeps the shading', () => {
     const sheen = '#00ff00';
     const plain = coinTone('#e0182d', 0, 4);
     const shiny = coinTone('#e0182d', 0, 4, sheen);
@@ -76,7 +76,7 @@ describe('colour themes', () => {
     expect(coinBase({ ...DEFAULT_THEME, sheen, sheenOn: true })).toBe(mixHex(DEFAULT_THEME.coin, sheen, 0.25));
   });
 
-  it('old saved themes and share links keep their single coin colour with sheen off; the removed settings are gone', () => {
+  it('old saved themes and share links keep their single coin color with sheen off; the removed settings are gone', () => {
     const old = { bg: '#000000', coin: '#31b7ff', coin2: '#1b3a52', coinByQuality: true, bot: '#2f6bff', platform: '#ffffff', table: '#e0e0e0' };
     const t = migrateTheme(sanitizeTheme(old));
     expect(t.coin).toBe('#31b7ff');
@@ -97,7 +97,7 @@ describe('colour themes', () => {
   });
 });
 
-describe('ring layout and live colours', () => {
+describe('ring layout and live colors', () => {
   it('10 equal circles around the centre that never overlap and stay inside the outer circle', () => {
     const ring = ringPositions(500, 500, 400, 10);
     expect(ring.positions).toHaveLength(10);
@@ -161,17 +161,17 @@ describe('tight ring around the hub (the eye)', () => {
     expect(TIGHT).toBeLessThan(1);
   });
 
-  it('tables use their own surface colour, different from the platform, in every preset', () => {
+  it('tables use their own surface color, different from the platform, in every preset', () => {
     expect(DEFAULT_THEME.table).not.toBe(DEFAULT_THEME.platform);
     for (const p of PRESETS) expect(p.theme.table, p.id).not.toBe(p.theme.platform);
-    // old saved themes where tables matched the platform exactly get a distinct table colour; a colour picked on purpose is kept
+    // old saved themes where tables matched the platform exactly get a distinct table color; a color picked on purpose is kept
     expect(migrateTheme({ ...DEFAULT_THEME, table: '#ffffff', platform: '#ffffff' }).table).toBe(DEFAULT_THEME.table);
     expect(migrateTheme({ ...DEFAULT_THEME, table: '#ffffff', platform: '#101010' }).table).toBe('#ffffff');
     expect(migrateTheme({ ...DEFAULT_THEME, table: '#ffeedd', platform: '#ffffff' }).table).toBe('#ffeedd');
     expect(sanitizeTheme({ table: '#123456' }).table).toBe('#123456');
   });
 
-  it('arena, sub-arena and table each have their own colour, different from each other, in the default and every preset', () => {
+  it('arena, sub-arena and table each have their own color, different from each other, in the default and every preset', () => {
     for (const p of [{ id: 'default', theme: DEFAULT_THEME }, ...PRESETS]) {
       const t = p.theme;
       expect(rgbDistance(t.arena, t.subarena), p.id).toBeGreaterThan(20);
@@ -180,10 +180,10 @@ describe('tight ring around the hub (the eye)', () => {
     }
   });
 
-  it('old saved themes get sensible arena and sub-arena colours; new ones round-trip', () => {
+  it('old saved themes get sensible arena and sub-arena colors; new ones round-trip', () => {
     const old = { bg: '#000000', platform: '#ffffff', table: '#e0e0e0', coin: '#e0182d' };
     const t = migrateTheme(sanitizeTheme(old));
-    expect(t.arena).toBe('#ffffff'); // arena takes the old platform colour
+    expect(t.arena).toBe('#ffffff'); // arena takes the old platform color
     expect(t.subarena).not.toBe(t.arena);
     expect(t.subarena).not.toBe(t.table);
     expect(rgbDistance(t.subarena, t.table)).toBeGreaterThan(20);
@@ -201,14 +201,14 @@ describe('tight ring around the hub (the eye)', () => {
     expect(themeFromHash('#' + link)).toMatchObject({ arena: '#010203', subarena: '#040506', table: '#070809' });
   });
 
-  it('each level colour is set on its own', () => {
+  it('each level color is set on its own', () => {
     const t = sanitizeTheme({ ...DEFAULT_THEME, arena: '#aa0000' });
     expect(t.arena).toBe('#aa0000');
     expect(t.subarena).toBe(DEFAULT_THEME.subarena);
     expect(t.table).toBe(DEFAULT_THEME.table);
   });
 
-  it('RANDOM picks every colour at once with readable contrast and distinct level colours', () => {
+  it('RANDOM picks every color at once with readable contrast and distinct level colors', () => {
     let s = 12345;
     const rng = (): number => { s = (s + 0x6d2b79f5) >>> 0; let t = Math.imul(s ^ (s >>> 15), 1 | s); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
     const seen = new Set<string>();
@@ -237,62 +237,70 @@ describe('tight ring around the hub (the eye)', () => {
     expect(DEFAULT_THEME.hubFill).toBe('#000000');
     expect(PRESETS[0]!.theme.hubFill).toBe('#000000');
     expect(migrateTheme({ ...DEFAULT_THEME, hubFill: '#e6e6e6' }).hubFill).toBe('#000000');
-    expect(migrateTheme({ ...DEFAULT_THEME, hubFill: '#123456' }).hubFill).toBe('#123456'); // a colour picked on purpose is kept
+    expect(migrateTheme({ ...DEFAULT_THEME, hubFill: '#123456' }).hubFill).toBe('#123456'); // a color picked on purpose is kept
   });
 });
 
 function luminanceOf(hex: string): number { return hexToHsl(hex)[2]; }
 
-describe('hub size follows coin volume', () => {
+describe('hub ring thickens with coin volume', () => {
   const w = 1000, maxR = w * 0.465;
   const at = (usd: number) => hubLayout(w / 2, w / 2, maxR, qualityFromVolume(usd));
 
-  it('is as big as before at $0 and low volume, and about one arena circle at $100k and up', () => {
+  it('outer edge stays tight against the arenas at every volume', () => {
     const base = ringPositions(w / 2, w / 2, maxR, 10);
-    for (const usd of [0, 100, 500]) expect(at(usd).hubR).toBeCloseTo(hubRadius(base), 6);
-    expect(at(100000).hubR).toBeCloseTo(base.circleRadius, 6);
-    expect(at(5_000_000).hubR).toBeCloseTo(base.circleRadius, 6);
-    expect(at(100000).hubR / hubRadius(base)).toBeLessThan(0.5);
-  });
-
-  it('shrinks steadily as volume rises (log scale, like coin quality)', () => {
-    let prev = Infinity;
-    for (const usd of [0, 500, 1000, 3000, 10000, 30000, 100000]) { const h = at(usd).hubR; expect(h).toBeLessThanOrEqual(prev); prev = h; }
-    expect(at(1500).hubR).toBeGreaterThan(at(30000).hubR);
-  });
-
-  it('the petals stay tight to the hub, reach the same outer edge, and the slot circles never change', () => {
-    const base = ringPositions(w / 2, w / 2, maxR, 10);
-    for (const usd of [0, 700, 5000, 30000, 100000]) {
+    const outer = hubRadius(base);
+    for (const usd of [0, 500, 5000, 30000, 100000, 5_000_000]) {
       const l = at(usd);
-      expect(l.petalDist - l.petalR).toBeCloseTo(l.hubR, 6); // touches the hub, no gap
-      expect(l.petalDist + l.petalR).toBeCloseTo(base.ringRadius + base.circleRadius, 6); // same outer edge
-      expect(l.petalR).toBeGreaterThanOrEqual(base.circleRadius - 1e-9); // arenas grow, never shrink
+      expect(l.outerR).toBeCloseTo(outer, 6);
       expect(l.ring.circleRadius).toBe(base.circleRadius);
-      // the slot circle always lies inside its petal
-      const p = l.ring.positions[3]!;
-      const px = w / 2 + Math.cos(p.angle) * l.petalDist, py = w / 2 + Math.sin(p.angle) * l.petalDist;
-      expect(Math.hypot(p.x - px, p.y - py) + p.r).toBeLessThanOrEqual(l.petalR + 1e-6);
+      expect(l.ring.ringRadius).toBe(base.ringRadius);
+      // slots keep their size and position
+      for (let i = 0; i < 10; i++) {
+        expect(l.ring.positions[i]!.x).toBe(base.positions[i]!.x);
+        expect(l.ring.positions[i]!.y).toBe(base.positions[i]!.y);
+        expect(l.ring.positions[i]!.r).toBe(base.positions[i]!.r);
+      }
     }
-    expect(at(100000).petalR).toBeGreaterThan(at(0).petalR * 1.5);
-    expect(at(0).petalR).toBeCloseTo(base.circleRadius, 6); // today's circles
-    expect(at(0).sectorR).toBeCloseTo(at(0).hubR, 6); // nothing extra at the biggest hub
-    expect(at(100000).sectorR).toBeCloseTo(at(100000).petalDist, 6); // the pie slice wraps the small hub
   });
 
-  it('hit testing finds the hub, the petals (including the grown part) and the gaps', () => {
+  it('fill is big and the ring is thin at low volume; fill is about one arena circle at max volume', () => {
+    const base = ringPositions(w / 2, w / 2, maxR, 10);
+    const outer = hubRadius(base);
+    const thin = Math.max(1.5, outer * 0.04);
+    for (const usd of [0, 100, 500]) {
+      expect(at(usd).fillR).toBeCloseTo(outer - thin, 6);
+      expect(at(usd).bandW).toBeCloseTo(thin, 6);
+    }
+    expect(at(100000).fillR).toBeCloseTo(base.circleRadius, 6);
+    expect(at(5_000_000).fillR).toBeCloseTo(base.circleRadius, 6);
+    expect(at(100000).bandW).toBeCloseTo(outer - base.circleRadius, 6);
+    expect(at(100000).fillR / outer).toBeLessThan(0.5);
+  });
+
+  it('the fill shrinks steadily as volume rises (log scale, like coin quality)', () => {
+    let prev = Infinity;
+    for (const usd of [0, 500, 1000, 3000, 10000, 30000, 100000]) {
+      const f = at(usd).fillR;
+      expect(f).toBeLessThanOrEqual(prev);
+      prev = f;
+    }
+    expect(at(1500).fillR).toBeGreaterThan(at(30000).fillR);
+    expect(at(100000).bandW).toBeGreaterThan(at(0).bandW * 5);
+  });
+
+  it('hit testing finds the hub (including the thick ring) and the slot circles', () => {
     const l = at(100000);
     const cx = w / 2;
     expect(hitLayout(l, cx, cx)).toBe(-2);
-    const near = (i: number, d: number) => { const a = l.ring.positions[i]!.angle; return hitLayout(l, cx + Math.cos(a) * d, cx + Math.sin(a) * d); };
+    // a point inside the thick ring (between fill and outer) is still the hub
+    expect(hitLayout(l, cx + (l.fillR + l.outerR) / 2, cx)).toBe(-2);
     for (let i = 0; i < 10; i++) {
-      expect(near(i, l.hubR * 1.1)).toBe(i); // the grown part right next to the hub
-      expect(near(i, l.petalDist)).toBe(i);
-      expect(near(i, l.outerR * 1.05)).toBe(-1);
+      const p = l.ring.positions[i]!;
+      expect(hitLayout(l, p.x, p.y)).toBe(i);
+      expect(hitRing(l.ring, p.x, p.y)).toBe(i);
     }
-    // at the biggest hub it matches the plain circles
-    const big = at(0);
-    for (let i = 0; i < 10; i++) { const p = big.ring.positions[i]!; expect(hitLayout(big, p.x, p.y)).toBe(i); expect(hitRing(big.ring, p.x, p.y)).toBe(i); }
+    expect(hitLayout(l, cx + l.outerR * 1.05, cx)).toBe(-1);
   });
 });
 
@@ -316,7 +324,7 @@ describe('text on or off', () => {
     expect(withHashParam('#go=3.5.2&text=off', 'text', null)).toBe('#go=3.5.2');
     expect(withHashParam('#text=off', 'text', null)).toBe('');
     expect(withHashParam('#text=off&theme=bg:000000;cq:0', 'text', 'off')).toBe('#theme=bg:000000;cq:0&text=off');
-    // a share link with colours and text off reads back correctly both ways
+    // a share link with colors and text off reads back correctly both ways
     const h = withHashParam('#' + themeToHash(DEFAULT_THEME), 'text', 'off');
     expect(sameTheme(themeFromHash(h)!, DEFAULT_THEME)).toBe(true);
     expect(textFlagFromHash(h)).toBe(false);
@@ -393,7 +401,7 @@ describe('live action on the top views', () => {
 });
 
 describe('the page has the arena of arenas', () => {
-  it('has the hub, the ring stage, the close-up, back button and colour panel, but no join or wallet controls', () => {
+  it('has the hub, the ring stage, the close-up, back button and color panel, but no join or wallet controls', () => {
     for (const id of ['id="ring"', 'id="cSd"', 'id="cOv"', 'id="back"', 'id="colors"', 'id="colorBtn"']) expect(INDEX_HTML).toContain(id);
     expect(INDEX_HTML).not.toMatch(/connect wallet|>\s*join\s*</i);
     expect(INDEX_HTML).not.toMatch(/[\u2014\u2013]/); // no em or en dashes in user-facing text

@@ -214,7 +214,7 @@ describe('DEMO_MODE: watch-only for outside users', () => {
   });
 });
 
-describe('/demo/overview (colours for the ring of arenas)', () => {
+describe('/demo/overview (colors for the ring of arenas)', () => {
   it('lists all 1000 seats and agrees with the full table plans', async () => {
     const s = make();
     const o = await s.get('/demo/overview?mode=twin');

@@ -131,8 +131,8 @@ export class DemoService {
 
   /**
    * A compact picture of all 1000 seats for one minute: when each table starts, how fast it plays, and how it ends.
-   * The page uses this to colour the ring of arenas and sub-arenas. Table close-ups still come from /demo/tables and
-   * are replayed exactly by the browser; this list is only for the overview colours.
+   * The page uses this to color the ring of arenas and sub-arenas. Table close-ups still come from /demo/tables and
+   * are replayed exactly by the browser; this list is only for the overview colors.
    * Per seat: [startDelayMs, stepMs, moves, end, score, coinsOnTable] where end is 1 fell, 2 cashed out, 3 stacks connected.
    */
   async overview(mode: Mode, slot: number | null, vol: string): Promise<Record<string, unknown>> {
