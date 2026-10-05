@@ -1,5 +1,5 @@
 {
-  "name": "caphet-stackgame",
+  "name": "caphet-arena",
   "version": "0.1.0",
   "private": true,
   "description": "CAPHET AI Bot Arena: deterministic coin stacking engine, house bots, and CAPH market helpers",

@@ -108,7 +108,25 @@ export function createApp(deps: AppDeps = {}): { app: Hono; service: GameService
     return c.json({ name: 'CAPHET AI Bot Arena', demoMode: config.demoMode, authMode: config.authMode, viewer: config.demoMode ? '/' : null, demo: '/demo/config', rules: '/llms.txt', spec: '/openapi.json', health: '/health' });
   });
   app.get('/demo.js', (c) => c.body(APP_JS, 200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' }));
-  app.get('/favicon.ico', (c) => c.body(null, 204));
+  // Public icons / PWA (also in /public for Vercel static). Local serve hits these.
+  const publicFile = async (c: Context, name: string, type: string) => {
+    try {
+      const { readFile } = await import('node:fs/promises');
+      const { fileURLToPath } = await import('node:url');
+      const root = fileURLToPath(new URL('../../..', import.meta.url));
+      const buf = await readFile(root + 'public/' + name);
+      return c.body(buf, 200, { 'content-type': type, 'cache-control': 'public, max-age=86400' });
+    } catch {
+      return c.body(null, 404);
+    }
+  };
+  app.get('/favicon.ico', (c) => publicFile(c, 'favicon.ico', 'image/x-icon'));
+  app.get('/favicon-32.png', (c) => publicFile(c, 'favicon-32.png', 'image/png'));
+  app.get('/apple-touch-icon.png', (c) => publicFile(c, 'apple-touch-icon.png', 'image/png'));
+  app.get('/icon-192.png', (c) => publicFile(c, 'icon-192.png', 'image/png'));
+  app.get('/icon-512.png', (c) => publicFile(c, 'icon-512.png', 'image/png'));
+  app.get('/og.jpg', (c) => publicFile(c, 'og.jpg', 'image/jpeg'));
+  app.get('/manifest.webmanifest', (c) => publicFile(c, 'manifest.webmanifest', 'application/manifest+json'));
   app.get('/health', (c) => c.json({ ok: true, time: now() }));
   app.get('/llms.txt', (c) => c.text(llmsTxt(config, baseUrl(c)), 200, { 'content-type': 'text/plain; charset=utf-8' }));
   app.get('/openapi.json', (c) => c.json(openApi(baseUrl(c), config.authMode)));

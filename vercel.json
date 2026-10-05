@@ -2,5 +2,10 @@
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
   "functions": { "api/index.ts": { "maxDuration": 30 } },
-  "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
+  "rewrites": [
+    {
+      "source": "/((?!favicon\\.ico$|favicon-32\\.png$|apple-touch-icon\\.png$|icon-192\\.png$|icon-512\\.png$|og\\.jpg$|manifest\\.webmanifest$).*)",
+      "destination": "/api"
+    }
+  ]
 }

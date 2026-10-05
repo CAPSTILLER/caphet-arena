@@ -1,0 +1,50 @@
+GitHub upload helper
+====================
+
+Prefer GitHub Desktop (https://desktop.github.com/) — one push, whole tree.
+Web Upload with Ctrl+A often skips nested folders.
+
+If you use the GitHub website "Upload files":
+1. Extract this zip.
+2. Open the "caphet-arena-main" folder after extract.
+3. Drag items from the sections below onto the upload area
+   (do not rely on Ctrl+A alone — nested folders get missed).
+
+Must upload for Vercel
+----------------------
+Folders:
+  - api/
+  - contracts/
+  - examples/
+  - public/
+  - scripts/
+  - src/
+  - test/
+  - web/
+
+Root files:
+  - .env.example
+  - package-lock.json
+  - package.json
+  - tsconfig.json
+  - vercel.json
+  - vitest.config.ts
+
+Optional
+--------
+Folders:
+  (none)
+
+Root files:
+  - .gitignore
+  - DEPLOY.md
+  - GITHUB-UPLOAD.txt
+  - README.md
+  - shots
+  - sim-results.txt
+
+Notes:
+- attachments/ is listed under Must when present — Capstiller apps often keep
+  site media (mp3/images) there that the running site references.
+- GITHUB-UPLOAD.txt / AGENTS.md / screenshots/ are optional for the deploy.
+- Prefer GitHub Desktop / git push for one shot of the whole tree.
