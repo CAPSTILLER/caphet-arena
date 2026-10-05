@@ -14,7 +14,7 @@ import { GameService } from './service.js';
 import { MemoryStore } from './store/memory.js';
 import type { Store } from './store/types.js';
 import { DemoService } from '../demo/service.js';
-import { APP_JS, INDEX_HTML } from './web-assets.generated.js';
+import { APP_JS, INDEX_HTML, MINT_HTML } from './web-assets.generated.js';
 import { LiveVolumeProvider, type VolumeProvider } from './volume.js';
 
 export interface AppDeps {
@@ -105,9 +105,10 @@ export function createApp(deps: AppDeps = {}): { app: Hono; service: GameService
     if (config.demoMode && (c.req.header('accept') ?? '').includes('text/html')) {
       return c.html(INDEX_HTML, 200, { 'cache-control': 'no-cache' });
     }
-    return c.json({ name: 'CAPHET AI Bot Arena', demoMode: config.demoMode, authMode: config.authMode, viewer: config.demoMode ? '/' : null, demo: '/demo/config', rules: '/llms.txt', spec: '/openapi.json', health: '/health' });
+    return c.json({ name: 'CAPHET AI Bot Arena', demoMode: config.demoMode, authMode: config.authMode, viewer: config.demoMode ? '/' : null, mint: '/mint', demo: '/demo/config', rules: '/llms.txt', spec: '/openapi.json', health: '/health' });
   });
   app.get('/demo.js', (c) => c.body(APP_JS, 200, { 'content-type': 'text/javascript; charset=utf-8', 'cache-control': 'no-cache' }));
+  app.get('/mint', (c) => c.html(MINT_HTML, 200, { 'cache-control': 'no-cache' }));
   // Public icons / PWA (also in /public for Vercel static). Local serve hits these.
   const publicFile = async (c: Context, name: string, type: string) => {
     try {

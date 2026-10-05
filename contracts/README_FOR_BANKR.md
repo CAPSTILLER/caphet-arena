@@ -69,3 +69,78 @@ Put these in the server environment: `CHAIN_RECORDS=on`, `CHAIN_ID=84532`, `CHAI
 ## Tests
 
 `cd contracts && forge test` runs 16 tests (roles, pause, duplicate rounds, bad inputs, best score logic, two-step ownership, ETH rejection, fuzz tests). The server side is checked against a real local chain with `npx tsx scripts/chain-local-check.ts` from the repo root.
+
+---
+
+# CaphetBotNFT: what to deploy (Base Sepolia first)
+
+Short version: deploy `CaphetBotNFT` on **Base Sepolia (chain id 84532)** when Cap is ready. It is a 1,000-supply ERC-721. Each mint pulls **100 GEAR** from the minter (approve first), sends **90% to treasury** and **10% to GearVault**, allows **one mint per wallet**, and assigns rarity at mint with weights **50 / 30 / 15 / 5** (common / uncommon / rare / mythic). Fixed daily CAPH amounts by rarity are **10 / 20 / 50 / 100**. This NFT contract pays **no CAPH**.
+
+Do **not** deploy until Cap provides the addresses below and says to go. Do **not** send ETH to the contract.
+
+## What Cap must provide
+
+| Item | Why |
+| --- | --- |
+| `OWNER_ADDRESS` | Admin (Safe preferred). Commits/reveals mint seed, opens mint, pauses, sets URI / treasury / vault, two-step ownership. |
+| `GEAR_TOKEN` | GEAR ERC-20 on Base Sepolia (then Base). Mint price is `100 * 10^decimals()`. |
+| `TREASURY_ADDRESS` | Receives 90% of each mint's GEAR. |
+| `GEAR_VAULT_ADDRESS` | Receives 10% of each mint's GEAR (GearVault). |
+| `BASE_URI` | Metadata prefix. `tokenURI(id)` is `BASE_URI + id + ".json"`. |
+| Sepolia ETH | Gas for deploy and later owner calls. |
+| CAPH vault funding | Only when daily claims go live (separate stub contract). |
+
+## Constructor arguments
+
+| Position | Name | Type |
+| --- | --- | --- |
+| 1 | `initialOwner` | address |
+| 2 | `gearToken` | address |
+| 3 | `treasury_` | address |
+| 4 | `gearVault_` | address |
+| 5 | `baseURI_` | string |
+
+## How to deploy (Foundry, this folder)
+
+```
+cd contracts
+export OWNER_ADDRESS=0x...
+export GEAR_TOKEN=0x...
+export TREASURY_ADDRESS=0x...
+export GEAR_VAULT_ADDRESS=0x...
+export BASE_URI=https://.../meta/
+export BASE_SEPOLIA_RPC_URL=https://sepolia.base.org
+# dry run:
+forge script script/DeployCaphetBotNFT.s.sol --rpc-url base_sepolia
+# real testnet (only when Cap says so):
+forge script script/DeployCaphetBotNFT.s.sol --rpc-url base_sepolia --broadcast --private-key $DEPLOYER_KEY
+```
+
+After deploy, owner must call in order: `commitMintSeed(keccak256(abi.encodePacked(seed)))`, then `revealMintSeed(seed)`, then `openMint()`. Minting stays closed until that sequence finishes.
+
+`artifacts/CaphetBotNFT.json` (after `forge build` + the export script in this README) holds ABI and creation bytecode for tools that do not use Foundry.
+
+## Randomness (documented choice)
+
+Commit-reveal of an owner seed, then at each mint:
+
+`keccak256(seed, tokenId, minter, block.prevrandao, block.timestamp)` mapped onto 50/30/15/5.
+
+Tradeoffs Cap accepted: no Chainlink VRF cost; Cap cannot pick the seed after seeing minters (commit first); offline grinding against a public seed alone does not work (prevrandao/timestamp); Base's sequencer can still bias slightly.
+
+## Security: NFT bots are not stealable real agents
+
+- The NFT is a **holding certificate**. It does **not** grant a private key, agent API, or downloadable strategy.
+- Daily "play" (when live) is a **server-attested claim**: check `ownerOf(tokenId)`, day eligibility, pay **only** `dailyPayoutOf(tokenId)`.
+- **HARD CAP**: NFT bots never earn more than the rarity table (10/20/50/100 CAPH per day). Scores may be recorded for glory but do **not** raise the NFT payout.
+- Vault limits for the later claim system: 500,000 CAPH/day and 10,000 CAPH per payout call.
+- House / watch-only demo bots stay separate. Real agent play is a later phase with different auth.
+- `CaphetBotDailyClaim` is a **stub**: `claim` always reverts with `NotLive`. Quote reads the hard cap from the NFT.
+
+## Mint page
+
+The watch-only demo stays at `/`. Mint stub UI is at `/mint` (wallet connect and mint/claim buttons are not live until Cap wires addresses).
+
+## Tests
+
+`cd contracts && forge test` runs GameRecords tests plus CaphetBotNFT / claim stub tests. Repo root: `npx vitest run` includes `test/nft-rules.test.ts`.

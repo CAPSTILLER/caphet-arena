@@ -9,6 +9,12 @@ This repo has four parts:
 3. **House bots** (`src/bots`, `scripts/house-bots.ts`) and a 31 line example agent (`examples/agent.ts`).
 4. **Onchain record book** (`contracts/`). A Solidity contract that stores results. It holds no tokens and pays nothing. The server can optionally write each finished round to it. Off by default.
 
+
+## Bot NFT collection (in progress)
+
+1,000 CaphetBot NFTs for humans first: mint for 100 GEAR (90% treasury, 10% GearVault), one per wallet, rarity odds 50/30/15/5 with fixed daily CAPH 10/20/50/100. NFT play is a server-attested claim against a holding NFT, not a stealable real agent. Contract and claim stub live under `contracts/`; mint stub page at `/mint`. Deploy notes for Bankr: `contracts/README_FOR_BANKR.md`. Do not deploy until Cap provides treasury, GearVault, GEAR token, and Sepolia ETH.
+
+
 ## Status
 
 - **Watch-only visual demo: ready to deploy.** The page at `/` shows house bots playing every seat. See DEPLOY.md.
