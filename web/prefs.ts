@@ -21,3 +21,10 @@ export function withHashParam(hash: string, key: string, value: string | null): 
   if (value !== null) parts.push(`${key}=${value}`);
   return parts.length ? '#' + parts.join('&') : '';
 }
+
+/** First-visit TEXT tip: show only when the tip has never been dismissed and there is no saved text preference yet. */
+export function shouldShowTextTip(tipSeen: string | null, textStore: string | null): boolean {
+  if (tipSeen) return false;
+  if (textStore !== null) return false;
+  return true;
+}

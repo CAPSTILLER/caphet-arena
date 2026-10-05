@@ -3,7 +3,7 @@ import { cashOut, createRound, placeCoin } from '../src/engine.js';
 import type { Mode, Move, RoundState } from '../src/types.js';
 import { qualityFromVolume } from '../src/quality.js';
 import { type Cell, arcFor, hitLayout, hubLayout, liveCell, ringPositions, spotsFor, tally } from './geometry.js';
-import { textFlagFromHash, textFlagFromStore, withHashParam } from './prefs.js';
+import { shouldShowTextTip, textFlagFromHash, textFlagFromStore, withHashParam } from './prefs.js';
 import {
   DEFAULT_THEME, PRESETS, migrateTheme, type Theme, type ThemeColorKey, THEME_KEYS, coinBase, coinTone, contrastOn, mixHex, normHex, randomTheme, rgba, sameTheme, sanitizeTheme, themeFromHash, themeToHash,
 } from './theme.js';
@@ -475,9 +475,9 @@ function node(ctx: CanvasRenderingContext2D, p: { x: number; y: number; r: numbe
 function tableDot(ctx: CanvasRenderingContext2D, q: { x: number; y: number; r: number }, c: Cell, seat: number, base: string): void {
   const bw = Math.max(0.7, q.r * 0.1);
   banded(ctx, q.x, q.y, q.r, T.table, T.ring, bw);
-  if (c.flash > 0 && c.phase !== 'play') { disc(ctx, q.x, q.y, q.r - bw); ctx.fillStyle = rgba(c.phase === 'fell' ? T.fell : T.cashed, 0.55 * c.flash); ctx.fill(); }
+  if (c.flash > 0 && c.phase !== 'play') { disc(ctx, q.x, q.y, q.r - bw); ctx.fillStyle = rgba(c.phase === 'fell' ? T.fell : T.cashed, 0.33 * c.flash); ctx.fill(); }
   if (c.phase === 'wait') return;
-  if (c.phase === 'fell') { disc(ctx, q.x, q.y, q.r * 0.6); ctx.strokeStyle = T.fell; ctx.lineWidth = Math.max(1, q.r * (0.2 + 0.2 * c.flash)); ctx.stroke(); return; }
+  if (c.phase === 'fell') { disc(ctx, q.x, q.y, q.r * 0.6); ctx.strokeStyle = T.fell; ctx.lineWidth = Math.max(1, q.r * (0.14 + 0.12 * c.flash)); ctx.stroke(); return; }
   const spots = spotsFor(S.mode === 'single' ? 1 : S.mode === 'twin' ? 2 : 3);
   const pulse = c.phase === 'play' ? Math.max(0, 1 - c.sinceMove / 300) : 0;
   spots.forEach((sp, i) => {
@@ -570,7 +570,7 @@ function drawStage(rep: TablesReply | null): void {
         // sub-arena dot: platform, then a growing disc and a pulse when a coin lands
         const bq = Math.max(0.7, q.r * 0.09);
         banded(ctx, q.x, q.y, q.r, T.subarena, T.ring, bq);
-        if (ty.flash > 0.02 && (ty.fell || ty.cashed)) { disc(ctx, q.x, q.y, q.r - bq); ctx.fillStyle = rgba(ty.fell ? T.fell : T.cashed, 0.5 * ty.flash); ctx.fill(); }
+        if (ty.flash > 0.02 && (ty.fell || ty.cashed)) { disc(ctx, q.x, q.y, q.r - bq); ctx.fillStyle = rgba(ty.fell ? T.fell : T.cashed, 0.3 * ty.flash); ctx.fill(); }
         // the tables' track: a ring in the table color that the 10 table arcs sit on
         ctx.beginPath(); ctx.arc(q.x, q.y, q.r * 0.74, 0, Math.PI * 2); ctx.lineWidth = lwSeg * 1.5; ctx.strokeStyle = T.table; ctx.stroke();
         const rd = q.r * (0.14 + 0.36 * ty.size) * (1 + 0.18 * ty.pulse);
@@ -584,7 +584,7 @@ function drawStage(rep: TablesReply | null): void {
           const bucket = c.phase === 'wait' ? 0 : Math.min(3, Math.floor(c.size * 4));
           const path = seg(c.phase === 'wait' ? 'wait' : c.phase === 'fell' ? 'fell' : c.phase === 'play' ? (c.sinceMove < 250 ? 'pulse' : 'play') : 'cashed', bucket);
           path.moveTo(q.x + rr * Math.cos(a0), q.y + rr * Math.sin(a0)); path.arc(q.x, q.y, rr, a0, a1);
-          if (c.flash > 0.25 && c.phase !== 'play' && c.phase !== 'wait') {
+          if (c.flash > 0.35 && c.phase !== 'play' && c.phase !== 'wait') {
             const fp = c.phase === 'fell' ? flashFell : flashCash;
             fp.moveTo(q.x + rr * Math.cos(a0), q.y + rr * Math.sin(a0)); fp.arc(q.x, q.y, rr, a0, a1);
           }
@@ -600,7 +600,7 @@ function drawStage(rep: TablesReply | null): void {
       ctx.lineWidth = kind === 'wait' ? lwSeg * 0.5 : lwSeg * (0.45 + 0.33 * bucket);
       ctx.strokeStyle = styleOf[kind]!; ctx.stroke(segs[key]!);
     }
-    ctx.lineWidth = lwSeg * 2.4; ctx.globalAlpha *= 0.55; ctx.strokeStyle = T.fell; ctx.stroke(flashFell); ctx.strokeStyle = T.cashed; ctx.stroke(flashCash); ctx.globalAlpha /= 0.55;
+    ctx.lineWidth = lwSeg * 1.45; ctx.globalAlpha *= 0.33; ctx.strokeStyle = T.fell; ctx.stroke(flashFell); ctx.strokeStyle = T.cashed; ctx.stroke(flashCash); ctx.globalAlpha /= 0.33;
     if (S.text) ring.positions.forEach((p, a) => {
       ctx.fillStyle = labelCol; ctx.globalAlpha *= 0.9; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       const dev = p.r / Math.min(2, window.devicePixelRatio || 1);
@@ -760,7 +760,7 @@ function legendHtml(): string {
     <div>${chip(`background:${T.subarena};border:2px solid ${T.ring}`)} a sub-arena (10 tables)</div>
     <div>${chip(`background:${T.table};border:2px solid ${T.ring}`)} a table</div>
     <div>${chip(`background:${T.subarena};border:3px dotted ${b}`)} ring of 10 arcs, one per table. Faint = waiting. Coin color = placing coins (thicker arc = taller stack). Cashed color = cashed out. Fell color = fell</div>
-    <div>${chip(`background:${T.subarena};border:2px solid ${T.hub};box-shadow:0 0 6px ${T.hub}`)} bright flash: a coin just landed</div>
+    <div>${chip(`background:${T.subarena};border:2px solid ${T.hub};box-shadow:0 0 6px ${T.hub}`)} soft flash: a coin just landed</div>
   </div>`;
 }
 function renderRight(rep: TablesReply | null): void {
@@ -957,7 +957,7 @@ function showInfo(): void {
     <p>A coin is 63.5 mm wide. Bots slide each new coin sideways. In <b>single</b> the score is how far (mm) the stack reaches out from the first coin. In <b>twin</b> and <b>triple</b> the stacks must touch each other and the score is the tallest stack in coins (capped at the second tallest plus 10). If the stack tips over it <b>falls</b>.</p>
     <p>Coin quality comes from live CAPH trading volume: at $500 or less coins are lopsided and wobbly, at $100,000 or more they are perfect. Use the volume menu to see what better or worse coins look like.</p>
     <p>Every table close-up is a real engine round. The server sends the seed, the volume and the moves. <b>Your browser replays them with the same engine</b> and checks the result (see "replay check"). The two outer views are a quick live picture made from each table's start time, speed and result, so they are approximate; the table views are exact.</p>
-    <p>Use <b>COLORS</b> to change every color and save it in this browser. <b>TEXT: ON/OFF</b> hides every label on the hub, arenas, sub-arenas and tables so only the pure picture shows.</p>
+    <p>Use <b>COLORS</b> to change every color and save it in this browser. <b>TEXT: ON/OFF</b> hides every label on the hub, arenas, sub-arenas and tables so only the pure picture shows. <b>SHARE PIC</b> downloads (or opens the phone share sheet for) a square PNG of the current view.</p>
     <p><button onclick="document.getElementById('modal').classList.remove('show')">CLOSE</button></p>`;
   $('modal').classList.add('show');
 }
@@ -975,12 +975,104 @@ function loadText(): void {
   if (v === null) { try { v = textFlagFromStore(localStorage.getItem(TEXT_STORE)); } catch { v = null; } }
   setText(v ?? true, fromHash);
 }
+const TIP_STORE = 'caphet-tip-text-v1';
+/** One short tip on the first visit pointing at TEXT. Returning users who already saw it, or who already saved a text preference, are left alone. */
+function maybeShowTextTip(): void {
+  let tipSeen: string | null = null, textStore: string | null = null;
+  try { tipSeen = localStorage.getItem(TIP_STORE); textStore = localStorage.getItem(TEXT_STORE); } catch { return; }
+  if (!shouldShowTextTip(tipSeen, textStore)) {
+    if (textStore !== null && !tipSeen) { try { localStorage.setItem(TIP_STORE, '1'); } catch { /* ignore */ } }
+    return;
+  }
+  const tip = $('tip');
+  tip.innerHTML = '<b>Tip:</b> tap <b>TEXT</b> to hide labels for a clean picture. <button type="button" id="tipOk">GOT IT</button>';
+  tip.classList.add('show');
+  const dismiss = (): void => {
+    tip.classList.remove('show'); tip.innerHTML = '';
+    try { localStorage.setItem(TIP_STORE, '1'); } catch { /* private mode */ }
+  };
+  $('tipOk').onclick = dismiss;
+  setTimeout(dismiss, 9000);
+}
+
+/**
+ * Export the current picture (ring or table close-up) as a square PNG, with the live colors and text on/off.
+ * On phones that support it, opens the share sheet; otherwise downloads the file.
+ */
+async function sharePicture(): Promise<void> {
+  const btn = $('shotBtn');
+  const prev = btn.textContent;
+  btn.textContent = '…'; btn.setAttribute('disabled', 'true');
+  try {
+    // paint one fresh frame so the export matches what is on screen
+    S.dirty = true;
+    const slot = Math.floor(S.vt / S.slotMs);
+    let rep = null as TablesReply | null;
+    if (S.view === 'grid' || S.level >= 2) { await loadSlot(slot).catch(() => {}); rep = repStore.get(keyOf(slot)) ?? null; }
+    if (S.view === 'grid') { if (rep) updateGrid(rep); }
+    else if (S.level < 3) drawStage(rep);
+    else updateClose(rep);
+
+    const size = 1080;
+    const out = document.createElement('canvas');
+    out.width = size; out.height = size;
+    const ctx = out.getContext('2d')!;
+    ctx.fillStyle = T.bg; ctx.fillRect(0, 0, size, size);
+
+    const blit = (src: HTMLCanvasElement, dx: number, dy: number, dw: number, dh: number): void => {
+      if (!src.width || !src.height) return;
+      // cover the target box while keeping the source square aspect
+      const sw = src.width, sh = src.height;
+      const side = Math.min(sw, sh);
+      const sx = (sw - side) / 2, sy = (sh - side) / 2;
+      ctx.drawImage(src, sx, sy, side, side, dx, dy, dw, dh);
+    };
+
+    if (S.view === 'rings' && S.level < 3) {
+      blit($<HTMLCanvasElement>('ring'), 0, 0, size, size);
+    } else if (S.view === 'rings' && S.level >= 3) {
+      // close-up: overhead on the left half, standing view on the right
+      blit($<HTMLCanvasElement>('cOv'), 0, size * 0.15, size * 0.5, size * 0.7);
+      blit($<HTMLCanvasElement>('cSd'), size * 0.5, size * 0.15, size * 0.5, size * 0.7);
+      ctx.fillStyle = T.text; ctx.font = 'bold 28px ui-monospace,monospace'; ctx.textAlign = 'center';
+      const plan = repStore.get(keyOf(slot))?.tables[S.table];
+      if (plan) ctx.fillText(plan.botName, size / 2, 48);
+    } else {
+      // table grid: use the ring if we have one, else a plain note
+      const ring = $<HTMLCanvasElement>('ring');
+      if (ring.width) blit(ring, 0, 0, size, size);
+      else {
+        ctx.fillStyle = T.text; ctx.font = '28px ui-monospace,monospace'; ctx.textAlign = 'center';
+        ctx.fillText('Switch to Arena of Arenas to save a picture', size / 2, size / 2);
+      }
+    }
+
+    const blob: Blob | null = await new Promise((resolve) => out.toBlob((b) => resolve(b), 'image/png'));
+    if (!blob) throw new Error('could not build the picture');
+    const name = `caphet-arena-${S.view === 'rings' ? (S.level === 0 ? 'hub' : S.level === 1 ? `arena-${S.arena}` : S.level === 2 ? `sub-${S.arena}-${S.sub}` : `table-${S.arena}-${S.sub}-${S.table}`) : 'grid'}.png`;
+    const file = new File([blob], name, { type: 'image/png' });
+    const nav = navigator as Navigator & { canShare?: (d: { files: File[] }) => boolean; share?: (d: ShareData) => Promise<void> };
+    if (nav.canShare && nav.share && nav.canShare({ files: [file] })) {
+      await nav.share({ files: [file], title: 'CAPHET Arena', text: 'Watch-only demo of the CAPHET Arena' });
+    } else {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url; a.download = name; a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 4000);
+    }
+  } catch (e) {
+    if ((e as { name?: string })?.name !== 'AbortError') console.warn('share picture', e);
+  } finally {
+    btn.textContent = prev; btn.removeAttribute('disabled');
+  }
+}
+
 function buildFooter(): void {
   $('pause').onclick = () => { S.paused = !S.paused; buildControls(); };
   $('follow').onclick = () => { const e = S.summary?.board[0]; if (e) goSeat(e.seat); };
   $('back').onclick = up;
   $('colorBtn').onclick = () => toggleColors();
   $('textBtn').onclick = () => setText(!S.text);
+  $('shotBtn').onclick = () => { void sharePicture(); };
   $('info').onclick = showInfo;
   $('modal').onclick = (e) => { if (e.target === $('modal')) $('modal').classList.remove('show'); };
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { if ($('modal').classList.contains('show')) $('modal').classList.remove('show'); else if ($('colors').classList.contains('show')) toggleColors(false); else up(); } });
@@ -1006,6 +1098,7 @@ async function boot(): Promise<void> {
   loadTheme();
   try { S.config = await (await fetch('/demo/config')).json(); S.clockOffset = S.config.serverNow - Date.now(); S.slotMs = S.config.slotMs; } catch { /* use defaults */ }
   buildControls(); buildGrid(); buildFooter(); buildColors(); loadText();
+  maybeShowTextTip();
   startFromHash();
   buildCrumb(); applyViewClasses();
   refreshSummary();

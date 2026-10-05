@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { FLASH_MS, TIGHT, arcFor, hitLayout, hitRing, hubLayout, hubRadius, liveCell, ringPositions, spotsFor, tally } from '../web/geometry.js';
-import { textFlagFromHash, textFlagFromStore, withHashParam } from '../web/prefs.js';
+import { shouldShowTextTip, textFlagFromHash, textFlagFromStore, withHashParam } from '../web/prefs.js';
 import {
   DEFAULT_THEME, PRESETS, THEME_KEYS, coinBase, migrateTheme, coinTone, contrastOn, contrastRatio, hexToHsl, hslToHex, mixHex, normHex, randomTheme, rgbDistance, sameTheme, sanitizeTheme, themeFromHash, themeToHash,
 } from '../web/theme.js';
@@ -305,6 +305,14 @@ describe('hub ring thickens with coin volume', () => {
 });
 
 describe('text on or off', () => {
+  it('the first-visit TEXT tip only shows for new visitors without a saved text preference', () => {
+    expect(shouldShowTextTip(null, null)).toBe(true);
+    expect(shouldShowTextTip('1', null)).toBe(false);
+    expect(shouldShowTextTip(null, '1')).toBe(false);
+    expect(shouldShowTextTip(null, '0')).toBe(false);
+    expect(shouldShowTextTip('1', '1')).toBe(false);
+  });
+
   it('reads the switch from the hash and from storage', () => {
     expect(textFlagFromHash('#text=off')).toBe(false);
     expect(textFlagFromHash('#go=3.5&text=0')).toBe(false);
@@ -352,7 +360,8 @@ describe('live action on the top views', () => {
     expect(last).toBeLessThanOrEqual(30);
   });
 
-  it('a landing coin and a round ending both flash, then fade', () => {
+  it('a landing coin and a round ending both flash, then fade (quieter ~840ms)', () => {
+    expect(FLASH_MS).toBe(840);
     expect(tally([liveCell(row, 5050)]).pulse).toBeGreaterThan(0.7);
     expect(tally([liveCell(row, 5800)]).pulse).toBe(0);
     const endAt = 2000 + 9 * 1000; // the last move

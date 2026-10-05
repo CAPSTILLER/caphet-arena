@@ -81,7 +81,8 @@ export interface Cell {
   flash: number;
 }
 
-export const FLASH_MS = 1400;
+/** How long a fall or cash-out flash lasts on the overview rings (about 40% quieter than the first cut). */
+export const FLASH_MS = 840;
 const NOT_STARTED: Cell = { phase: 'wait', coins: 0, coinsF: 0, size: 0, sinceMove: 1e9, flash: 0 };
 
 /**

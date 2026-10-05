@@ -40,7 +40,7 @@ select { font:inherit; color:var(--text); background:var(--panel2); border:1px s
 .y { color:var(--accent); } .g { color:var(--ok); } .r { color:var(--bad); } .t { color:var(--coin); }
 main { display:grid; grid-template-columns:270px minmax(0,1fr) 330px; gap:14px; padding:0 18px 14px; flex:1; align-items:start; }
 @media (max-width:1250px) { main { grid-template-columns:240px minmax(0,1fr); } #focus { grid-column:1 / -1; } }
-@media (max-width:760px) { .banner { display:none; } .strip { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:6px; } .stat { min-width:0; padding:4px 8px; } .stat i { font-size:9px; letter-spacing:.1em; overflow-wrap:anywhere; } .stat b { font-size:14px; overflow-wrap:anywhere; } header { gap:8px; padding-top:8px; padding-bottom:8px; } .logo { font-size:16px; } .pickers { gap:8px; padding-top:6px; padding-bottom:6px; } .modes button { padding:6px 10px; } footer { padding:8px 10px; gap:6px; } footer .note { display:none; } main { grid-template-columns:1fr; padding:0 8px 14px; } #center { order:-1; } header, .pickers, .strip { padding-left:10px; padding-right:10px; } }
+@media (max-width:760px) { .banner { display:none; } .strip { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:5px; padding-top:6px; padding-bottom:6px; } .stat { min-width:0; padding:3px 6px; } .stat i { font-size:8px; letter-spacing:.08em; overflow-wrap:anywhere; } .stat b { font-size:13px; overflow-wrap:anywhere; } header { gap:4px; padding-top:6px; padding-bottom:4px; } .logo { font-size:14px; } .logo small { font-size:8px; letter-spacing:.2em; } .crumb { display:none; } .pickers { gap:4px 10px; padding-top:4px; padding-bottom:4px; } .pickers label { font-size:9px; letter-spacing:.12em; margin-right:4px; } .modes button { padding:4px 8px; font-size:11px; } .row button { padding:3px 7px; font-size:11px; } select { padding:3px 6px; font-size:12px; } footer { padding:6px 8px; gap:4px; } footer .note { display:none; } footer button { padding:5px 8px; font-size:11px; } main { grid-template-columns:1fr; padding:0 6px 8px; gap:8px; } #center { order:-1; } header, .pickers, .strip { padding-left:8px; padding-right:8px; } #ringWrap { width:min(100%, calc(100vh - 195px)); } #hover, #hint { font-size:11px; padding:2px 4px; } .panel { padding:8px 10px; } }
 .panel { background:var(--panel); border:1px solid var(--line); border-radius:14px; padding:12px 14px; }
 .panel h3 { margin:0 0 8px; font-size:11px; color:var(--dim); letter-spacing:.24em; font-weight:600; }
 .kv { display:flex; justify-content:space-between; padding:2px 0; gap:10px; }
@@ -124,6 +124,14 @@ input[type=color] { width:34px; height:28px; border:1px solid var(--line); backg
 .crow input[type=text] { width:78px; font:inherit; color:var(--text); background:var(--panel2); border:1px solid var(--line); border-radius:6px; padding:3px 5px; }
 #colors .btns { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
 #shareMsg { color:var(--dim); font-size:11px; margin-top:6px; word-break:break-all; }
+#textBtn { border-color:var(--accent); color:var(--accent); font-weight:700; letter-spacing:.06em; }
+#textBtn.on { background:var(--accent); color:var(--bg); border-color:var(--accent); }
+#shotBtn { border-color:var(--line); }
+#tip { position:fixed; left:50%; bottom:72px; transform:translateX(-50%); z-index:9; max-width:min(340px, calc(100vw - 24px)); background:var(--panel); color:var(--text); border:1px solid var(--accent); border-radius:12px; padding:10px 12px; font-size:12px; line-height:1.4; box-shadow:0 8px 28px rgba(0,0,0,.45); display:none; }
+#tip.show { display:block; }
+#tip b { color:var(--accent); }
+#tip button { margin-left:8px; padding:2px 8px; font-size:11px; }
+@media (max-width:760px) { #tip { bottom:58px; } }
 </style>
 </head>
 <body>
@@ -161,10 +169,11 @@ input[type=color] { width:34px; height:28px; border:1px solid var(--line); backg
 <footer>
   <div class="grp"><button id="back">&#8592; BACK</button><button id="follow">&#9678; FOLLOW LEADER</button></div>
   <div class="grp"><button id="pause" title="pause or resume">&#10073;&#10073;</button><span id="speeds" class="grp"></span></div>
-  <div class="grp"><button id="colorBtn">COLORS</button><button id="textBtn" title="show or hide all labels on the hub, arenas, sub-arenas and tables">TEXT: ON</button></div>
+  <div class="grp"><button id="colorBtn">COLORS</button><button id="textBtn" title="show or hide all labels on the hub, arenas, sub-arenas and tables">TEXT: ON</button><button id="shotBtn" title="save or share a picture of the current view">SHARE PIC</button></div>
   <div class="grp"><button id="info">i</button></div>
   <div class="note" id="note">Play coins only &middot; house bots &middot; tap a circle to go in</div>
 </footer>
+<div id="tip" role="status" aria-live="polite"></div>
 <div id="modal"><div class="box" id="modalBox"></div></div>
 <script src="/demo.js"></script>
 </body>
