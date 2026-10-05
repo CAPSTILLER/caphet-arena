@@ -3,9 +3,9 @@
 export interface Theme {
   bg: string; // page background
   text: string; // text
-  coin: string; // coins (and the main accent of the stacks)
-  coin2: string; // coins at the lowest quality, used only when coinByQuality is on
-  coinByQuality: boolean; // false = one coin colour, true = blend from coin2 (worst) to coin (best)
+  coin: string; // the solid coin colour (and the main accent of the stacks)
+  sheen: string; // laid over every coin at 25% opacity when sheenOn is true
+  sheenOn: boolean;
   platform: string; // the big circle behind the ring of 10 arenas (the top level backdrop)
   arena: string; // the 10 big arena circles
   subarena: string; // the circles inside an arena (10 per arena); also the slab a table stands on in the close-up
@@ -13,41 +13,40 @@ export interface Theme {
   ring: string; // rings and outlines
   hub: string; // hub text, hub outline and highlights
   hubFill: string; // hub fill
-  bot: string; // bot discs
   fell: string; // marks for a stack that fell
   cashed: string; // marks for a round that was cashed out
 }
 
-export const THEME_KEYS = ['bg', 'text', 'coin', 'coin2', 'platform', 'arena', 'subarena', 'table', 'ring', 'hub', 'hubFill', 'bot', 'fell', 'cashed'] as const;
+export const THEME_KEYS = ['bg', 'text', 'coin', 'sheen', 'platform', 'arena', 'subarena', 'table', 'ring', 'hub', 'hubFill', 'fell', 'cashed'] as const;
 export type ThemeColorKey = (typeof THEME_KEYS)[number];
 
 /** Black background, white platforms, red coins and outlines, yellow-orange hub. This is the default. */
 export const DEFAULT_THEME: Theme = {
-  bg: '#000000', text: '#f2f2f2', coin: '#e0182d', coin2: '#6b1a24', coinByQuality: false,
-  platform: '#ffffff', arena: '#ffffff', subarena: '#b8b8b8', table: '#e0e0e0', ring: '#e0182d', hub: '#f5a000', hubFill: '#000000', bot: '#2f6bff', fell: '#ff3b3b', cashed: '#f5a000',
+  bg: '#000000', text: '#f2f2f2', coin: '#e0182d', sheen: '#ffffff', sheenOn: false,
+  platform: '#ffffff', arena: '#ffffff', subarena: '#b8b8b8', table: '#e0e0e0', ring: '#e0182d', hub: '#f5a000', hubFill: '#000000', fell: '#ff3b3b', cashed: '#f5a000',
 };
 
 export const PRESETS: { id: string; name: string; theme: Theme }[] = [
   { id: 'bwr', name: 'Black / White / Red', theme: DEFAULT_THEME },
   {
     id: 'grok', name: 'Grok navy and teal',
-    theme: { bg: '#070b16', text: '#dbe6ff', coin: '#ffd34d', coin2: '#6b5a20', coinByQuality: false, platform: '#101b33', arena: '#17294d', subarena: '#0d4654', table: '#27415f', ring: '#23d5c4', hub: '#ffd34d', hubFill: '#0e1526', bot: '#23d5c4', fell: '#ff5a6a', cashed: '#3ddc84' },
+    theme: { bg: '#070b16', text: '#dbe6ff', coin: '#ffd34d', sheen: '#fff3b0', sheenOn: false, platform: '#101b33', arena: '#17294d', subarena: '#0d4654', table: '#27415f', ring: '#23d5c4', hub: '#ffd34d', hubFill: '#0e1526', fell: '#ff5a6a', cashed: '#3ddc84' },
   },
   {
     id: 'paper', name: 'Paper',
-    theme: { bg: '#f4f1ea', text: '#1a1a1a', coin: '#c2182b', coin2: '#d9b8bc', coinByQuality: false, platform: '#ffffff', arena: '#ffffff', subarena: '#d3cbb6', table: '#efe9da', ring: '#1a1a1a', hub: '#b36b00', hubFill: '#efe9da', bot: '#1f5eff', fell: '#d00000', cashed: '#b36b00' },
+    theme: { bg: '#f4f1ea', text: '#1a1a1a', coin: '#c2182b', sheen: '#ffd0d6', sheenOn: false, platform: '#ffffff', arena: '#ffffff', subarena: '#d3cbb6', table: '#efe9da', ring: '#1a1a1a', hub: '#b36b00', hubFill: '#efe9da', fell: '#d00000', cashed: '#b36b00' },
   },
   {
     id: 'gold', name: 'Gold on black',
-    theme: { bg: '#050505', text: '#f3e6c4', coin: '#e8b923', coin2: '#5a4510', coinByQuality: true, platform: '#15120a', arena: '#241d0c', subarena: '#42330f', table: '#0e0b04', ring: '#e8b923', hub: '#ffd66b', hubFill: '#201a0a', bot: '#7fd6ff', fell: '#ff5555', cashed: '#7be07b' },
+    theme: { bg: '#050505', text: '#f3e6c4', coin: '#e8b923', sheen: '#fff0b8', sheenOn: true, platform: '#15120a', arena: '#241d0c', subarena: '#42330f', table: '#0e0b04', ring: '#e8b923', hub: '#ffd66b', hubFill: '#201a0a', fell: '#ff5555', cashed: '#7be07b' },
   },
   {
     id: 'ocean', name: 'Ocean',
-    theme: { bg: '#04121c', text: '#d8f1ff', coin: '#31b7ff', coin2: '#1b3a52', coinByQuality: true, platform: '#0a2536', arena: '#0e3149', subarena: '#17597d', table: '#07202f', ring: '#31b7ff', hub: '#ffcf5a', hubFill: '#0a1b28', bot: '#ffcf5a', fell: '#ff6b6b', cashed: '#5be6a0' },
+    theme: { bg: '#04121c', text: '#d8f1ff', coin: '#31b7ff', sheen: '#d4f3ff', sheenOn: true, platform: '#0a2536', arena: '#0e3149', subarena: '#17597d', table: '#07202f', ring: '#31b7ff', hub: '#ffcf5a', hubFill: '#0a1b28', fell: '#ff6b6b', cashed: '#5be6a0' },
   },
   {
     id: 'mono', name: 'Mono',
-    theme: { bg: '#101010', text: '#e8e8e8', coin: '#bdbdbd', coin2: '#444444', coinByQuality: true, platform: '#1c1c1c', arena: '#2a2a2a', subarena: '#454545', table: '#101010', ring: '#8a8a8a', hub: '#ffffff', hubFill: '#2a2a2a', bot: '#ffffff', fell: '#ff6666', cashed: '#9be29b' },
+    theme: { bg: '#101010', text: '#e8e8e8', coin: '#bdbdbd', sheen: '#ffffff', sheenOn: true, platform: '#1c1c1c', arena: '#2a2a2a', subarena: '#454545', table: '#101010', ring: '#8a8a8a', hub: '#ffffff', hubFill: '#2a2a2a', fell: '#ff6666', cashed: '#9be29b' },
   },
 ];
 
@@ -113,14 +112,22 @@ export function contrastOn(hex: string): string { return luminance(hex) > 0.4 ? 
 
 // ---- coin colours ---------------------------------------------------------------------------
 
-/** The base coin colour for a table: one colour, or a blend by coin quality (0 worst, 1 best). */
-export function coinBase(t: Theme, quality: number): string {
-  return t.coinByQuality ? mixHex(t.coin2, t.coin, quality) : t.coin;
+/** Share of the sheen colour laid over a coin when sheen is on. */
+export const SHEEN_ALPHA = 0.25;
+/** The coin colour as shown on flat discs (the solid colour, with the sheen laid over it at 25% when sheen is on). */
+export function coinBase(t: Theme): string {
+  return t.sheenOn ? mixHex(t.coin, t.sheen, SHEEN_ALPHA) : t.coin;
 }
 export interface CoinTone { light: string; dark: string; edge: string; ring: string }
 const STACK_HUE_SHIFT = [0, 26, -26];
 /** Colours for one coin. i is its height in the stack (higher coins are a little lighter). */
-export function coinTone(base: string, stackIdx: number, i: number): CoinTone {
+export function coinTone(base: string, stackIdx: number, i: number, sheen: string | null = null): CoinTone {
+  const t = coinToneSolid(base, stackIdx, i);
+  if (!sheen) return t;
+  // the sheen sits over the coin at 25%, so every shade (face, side, edge, rim) keeps its own light and dark
+  return { light: mixHex(t.light, sheen, SHEEN_ALPHA), dark: mixHex(t.dark, sheen, SHEEN_ALPHA), edge: mixHex(t.edge, sheen, SHEEN_ALPHA), ring: mixHex(t.ring, sheen, SHEEN_ALPHA) };
+}
+function coinToneSolid(base: string, stackIdx: number, i: number): CoinTone {
   const [h, s, l] = hexToHsl(base);
   const hh = h + (STACK_HUE_SHIFT[stackIdx % 3] ?? 0);
   const li = Math.max(8, Math.min(88, l - 12 + Math.min(24, i * 2)));
@@ -156,13 +163,13 @@ export function sanitizeTheme(raw: unknown): Theme {
     if (rgbDistance(sub, out.table) < 24) sub = mixHex(base, contrastOn(base), 0.5);
     out.subarena = sub;
   }
-  if (typeof o.coinByQuality === 'boolean') out.coinByQuality = o.coinByQuality;
+  if (typeof o.sheenOn === 'boolean') out.sheenOn = o.sheenOn;
   return out;
 }
 
-/** Short text for a share link, like theme=bg:000000;coin:e0182d;cq:0 */
+/** Short text for a share link, like theme=bg:000000;coin:e0182d;sh:0 */
 export function themeToHash(t: Theme): string {
-  return 'theme=' + THEME_KEYS.map((k) => `${k}:${t[k].slice(1)}`).join(';') + `;cq:${t.coinByQuality ? 1 : 0}`;
+  return 'theme=' + THEME_KEYS.map((k) => `${k}:${t[k].slice(1)}`).join(';') + `;sh:${t.sheenOn ? 1 : 0}`;
 }
 /** Reads what themeToHash wrote (with or without the leading #). Returns null if there is no theme in the text. */
 export function themeFromHash(hash: string): Theme | null {
@@ -172,13 +179,14 @@ export function themeFromHash(hash: string): Theme | null {
   for (const part of decodeURIComponent(m[1]!).split(';')) {
     const [k, v] = part.split(':');
     if (!k || v === undefined) continue;
-    if (k === 'cq') raw.coinByQuality = v === '1';
+    if (k === 'sh') raw.sheenOn = v === '1';
+    else if (k === 'cq' || k === 'coin2' || k === 'bot') continue; // old links: coin colouring by quality and bot discs no longer exist; the single coin colour is kept, sheen off
     else raw[k] = '#' + v;
   }
   return sanitizeTheme(raw);
 }
 export function sameTheme(a: Theme, b: Theme): boolean {
-  return THEME_KEYS.every((k) => a[k] === b[k]) && a.coinByQuality === b.coinByQuality;
+  return THEME_KEYS.every((k) => a[k] === b[k]) && a.sheenOn === b.sheenOn;
 }
 
 // ---- random colours -------------------------------------------------------------------------------
@@ -231,15 +239,17 @@ export function randomTheme(rng: () => number = Math.random): Theme {
     const accent = hue + 180 + r(-60, 60);
     const mid = (a: number, b: number): number => (dark ? b : a);
     const coin = fitContrast(hslToHex(accent, r(70, 95), dark ? r(52, 64) : r(38, 48)), [table], 3);
-    const coin2 = fitContrast(mixHex(coin, table, 0.65), [table], 1.6);
+    // sheen: random on or off and a random colour; when on, the coin as shown must still stand out from the table
+    let sheen = hslToHex(r(0, 360), r(40, 90), dark ? r(60, 85) : r(45, 75));
+    let sheenOn = rng() < 0.5;
+    for (let k = 0; sheenOn && contrastRatio(mixHex(coin, sheen, SHEEN_ALPHA), table) < 3; k++) { if (k >= 4) sheenOn = false; else sheen = mixHex(sheen, coin, 0.5); }
     const ring = fitContrast(rng() < 0.5 ? coin : hslToHex(accent + r(-50, 50), r(60, 95), mid(40, 58)), [...levels, bg], 2.5);
     const hubFill = hslToHex(hue, r(10, 40), dark ? r(3, 10) : r(88, 95));
     const hub = fitContrast(fitContrast(hslToHex(r(25, 55), 90, mid(42, 56)), levels, 3), [hubFill], 4.5);
-    const bot = fitContrast(hslToHex(r(0, 360), r(70, 95), mid(40, 62)), [table, bg], 3);
     const fell = fitContrast(hslToHex(r(-8, 8), r(80, 95), mid(40, 60)), [...levels, bg], 3);
     const cashed = fitContrast(hslToHex(r(90, 160), r(60, 85), mid(36, 56)), [...levels, bg], 3);
     const text = fitContrast(hslToHex(hue, r(5, 20), dark ? r(88, 95) : r(6, 14)), [bg], 7);
-    return { bg, text, coin, coin2, coinByQuality: rng() < 0.4, platform, arena, subarena, table, ring, hub, hubFill, bot, fell, cashed };
+    return { bg, text, coin, sheen, sheenOn, platform, arena, subarena, table, ring, hub, hubFill, fell, cashed };
   }
   return { ...DEFAULT_THEME };
 }

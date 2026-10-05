@@ -30,18 +30,18 @@ describe('colour themes', () => {
   });
 
   it('bad or hostile input is ignored, never trusted', () => {
-    const t = sanitizeTheme({ bg: 'red', coin: '#12', text: 'url(javascript:alert(1))', ring: '#abc', platform: '<script>', coinByQuality: 'yes' });
+    const t = sanitizeTheme({ bg: 'red', coin: '#12', text: 'url(javascript:alert(1))', ring: '#abc', platform: '<script>', sheenOn: 'yes' });
     expect(t.bg).toBe(DEFAULT_THEME.bg);
     expect(t.coin).toBe(DEFAULT_THEME.coin);
     expect(t.text).toBe(DEFAULT_THEME.text);
     expect(t.platform).toBe(DEFAULT_THEME.platform);
     expect(t.ring).toBe('#aabbcc'); // short hex is widened
-    expect(t.coinByQuality).toBe(false);
-    const fromHash = themeFromHash('#theme=bg:zzzzzz;coin:ff0000;evil:1;cq:1')!;
+    expect(t.sheenOn).toBe(false);
+    const fromHash = themeFromHash('#theme=bg:zzzzzz;coin:ff0000;evil:1;sh:1')!;
     expect(fromHash.bg).toBe(DEFAULT_THEME.bg);
     expect(fromHash.coin).toBe('#ff0000');
-    expect(fromHash.coinByQuality).toBe(true);
-    expect(Object.keys(fromHash).sort()).toEqual([...THEME_KEYS, 'coinByQuality'].sort());
+    expect(fromHash.sheenOn).toBe(true);
+    expect(Object.keys(fromHash).sort()).toEqual([...THEME_KEYS, 'sheenOn'].sort());
     expect(sanitizeTheme(null)).toEqual(DEFAULT_THEME);
   });
 
@@ -54,17 +54,46 @@ describe('colour themes', () => {
     expect(hslToHex(h, s, l)).toBe('#e0182d');
   });
 
-  it('coins: one colour by default, a quality blend when switched on, higher coins a little lighter', () => {
-    expect(coinBase(DEFAULT_THEME, 0)).toBe(DEFAULT_THEME.coin);
-    expect(coinBase(DEFAULT_THEME, 1)).toBe(DEFAULT_THEME.coin);
-    const q = { ...DEFAULT_THEME, coinByQuality: true };
-    expect(coinBase(q, 0)).toBe(q.coin2);
-    expect(coinBase(q, 1)).toBe(q.coin);
-    expect(coinBase(q, 0.5)).not.toBe(q.coin);
+  it('coins: one solid colour, higher coins a little lighter, sheen off by default', () => {
+    expect(DEFAULT_THEME.sheenOn).toBe(false);
+    expect(coinBase(DEFAULT_THEME)).toBe(DEFAULT_THEME.coin);
     const low = hexToHsl(coinTone(DEFAULT_THEME.coin, 0, 0).dark)[2];
     const high = hexToHsl(coinTone(DEFAULT_THEME.coin, 0, 10).dark)[2];
     expect(high).toBeGreaterThan(low);
     expect(coinTone(DEFAULT_THEME.coin, 1, 3).dark).not.toBe(coinTone(DEFAULT_THEME.coin, 0, 3).dark); // stacks 2 and 3 are tinted apart
+  });
+
+  it('sheen lays the sheen colour over each coin at 25% and keeps the shading', () => {
+    const sheen = '#00ff00';
+    const plain = coinTone('#e0182d', 0, 4);
+    const shiny = coinTone('#e0182d', 0, 4, sheen);
+    for (const k of ['light', 'dark', 'edge', 'ring'] as const) expect(shiny[k], k).toBe(mixHex(plain[k], sheen, 0.25));
+    // the face is still lighter than the edge, so the shading shows through
+    expect(hexToHsl(shiny.light)[2]).toBeGreaterThan(hexToHsl(shiny.edge)[2]);
+    expect(shiny.dark).not.toBe(plain.dark);
+    // flat discs: solid when off, sheen mixed in at 25% when on
+    expect(coinBase({ ...DEFAULT_THEME, sheen, sheenOn: false })).toBe(DEFAULT_THEME.coin);
+    expect(coinBase({ ...DEFAULT_THEME, sheen, sheenOn: true })).toBe(mixHex(DEFAULT_THEME.coin, sheen, 0.25));
+  });
+
+  it('old saved themes and share links keep their single coin colour with sheen off; the removed settings are gone', () => {
+    const old = { bg: '#000000', coin: '#31b7ff', coin2: '#1b3a52', coinByQuality: true, bot: '#2f6bff', platform: '#ffffff', table: '#e0e0e0' };
+    const t = migrateTheme(sanitizeTheme(old));
+    expect(t.coin).toBe('#31b7ff');
+    expect(t.sheenOn).toBe(false);
+    expect(t.sheen).toMatch(/^#[0-9a-f]{6}$/);
+    expect(Object.keys(t)).not.toContain('coin2');
+    expect(Object.keys(t)).not.toContain('bot');
+    expect(Object.keys(t)).not.toContain('coinByQuality');
+    const link = themeFromHash('#theme=bg:000000;coin:31b7ff;coin2:1b3a52;bot:2f6bff;cq:1')!;
+    expect(link.coin).toBe('#31b7ff');
+    expect(link.sheenOn).toBe(false);
+    // sheen round-trips in new links
+    const sh = themeFromHash('#' + themeToHash({ ...DEFAULT_THEME, sheen: '#123456', sheenOn: true }))!;
+    expect(sh).toMatchObject({ sheen: '#123456', sheenOn: true });
+    expect(themeToHash(DEFAULT_THEME)).toContain('sh:0');
+    expect(themeToHash(DEFAULT_THEME)).not.toMatch(/coin2|cq:|bot:/);
+    expect(sameTheme(DEFAULT_THEME, { ...DEFAULT_THEME, sheenOn: true })).toBe(false);
   });
 });
 
@@ -194,10 +223,12 @@ describe('tight ring around the hub (the eye)', () => {
       for (const l of [...levels, t.bg]) expect(contrastRatio(t.ring, l), 'ring').toBeGreaterThanOrEqual(2.5);
       expect(contrastRatio(t.hub, t.hubFill), 'hub').toBeGreaterThanOrEqual(4.5);
       for (const k of ['fell', 'cashed'] as const) for (const l of [...levels, t.bg]) expect(contrastRatio(t[k], l), k).toBeGreaterThanOrEqual(3);
-      expect(contrastRatio(t.bot, t.table), 'bot').toBeGreaterThanOrEqual(3);
+      if (t.sheenOn) expect(contrastRatio(mixHex(t.coin, t.sheen, 0.25), t.table), 'coin with sheen').toBeGreaterThanOrEqual(2.5);
       expect(sameTheme(sanitizeTheme(t), t)).toBe(true);
     }
     expect(seen.size).toBeGreaterThan(390); // pressing it again gives something new
+    const sheens = new Set<boolean>(); { let k = 77; const r2 = (): number => { k = (k * 1103515245 + 12345) % 2147483648; return k / 2147483648; }; for (let n = 0; n < 60; n++) sheens.add(randomTheme(r2).sheenOn); }
+    expect(sheens.size).toBe(2); // sheen comes out both on and off
     // and with Math.random
     expect(sameTheme(randomTheme(), randomTheme())).toBe(false);
   });

@@ -41,7 +41,7 @@ const TEXT_STORE = 'caphet-text';
 function applyTheme(): void {
   const st = document.documentElement.style;
   st.setProperty('--bg', T.bg); st.setProperty('--text', T.text); st.setProperty('--coin', T.coin); st.setProperty('--ring', T.ring);
-  st.setProperty('--accent', T.hub); st.setProperty('--ok', T.cashed); st.setProperty('--bad', T.fell); st.setProperty('--botc', T.bot); st.setProperty('--platform', T.platform);
+  st.setProperty('--accent', T.hub); st.setProperty('--ok', T.cashed); st.setProperty('--bad', T.fell); st.setProperty('--platform', T.platform);
 }
 function setTheme(patch: Partial<Theme>, save = true): void {
   T = sanitizeTheme({ ...T, ...patch });
@@ -203,7 +203,7 @@ function drawOverheadAt(ctx: CanvasRenderingContext2D, st: RoundState, cx: numbe
     ctx.strokeStyle = T.hub; ctx.lineWidth = Math.max(1.5, 3 * k); ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
   });
   // coins, bottom to top
-  const base = coinBase(T, quality);
+  const base = coinBase(T);
   st.stacks.forEach((stack, si) => {
     stack.forEach((c, i) => {
       const [x, y] = P(c.x, c.y);
@@ -211,7 +211,7 @@ function drawOverheadAt(ctx: CanvasRenderingContext2D, st: RoundState, cx: numbe
       const lift = Math.min(10, i * 0.5) * k * 2;
       const topIdx = i === stack.length - 1;
       const pop = topIdx ? Math.min(1, fresh) : 1;
-      const tone = coinTone(base, st.mode === 'single' ? 0 : si, i);
+      const tone = coinTone(T.coin, st.mode === 'single' ? 0 : si, i, T.sheenOn ? T.sheen : null);
       ctx.save();
       ctx.translate(0, -lift);
       ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 5 * k * 2; ctx.shadowOffsetY = 2 * k * 2;
@@ -267,7 +267,7 @@ function drawStanding(cv: HTMLCanvasElement, st: RoundState, quality: number): v
   ctx.strokeStyle = rgba(T.ring, 0.15); ctx.lineWidth = 1;
   for (const f of [0.34, 0.67]) { ctx.beginPath(); ctx.ellipse(px, py, ex * f, ey * f, 0, 0, Math.PI * 2); ctx.stroke(); }
   // stacks, back to front
-  const base = coinBase(T, quality);
+  const base = coinBase(T);
   const order = st.stacks.map((stack, si) => ({ stack, si, y: stack.length ? stack.reduce((a, c) => a + c.y, 0) / stack.length : 0 })).sort((a, b) => a.y - b.y);
   for (const o of order) {
     if (!o.stack.length) continue;
@@ -278,7 +278,7 @@ function drawStanding(cv: HTMLCanvasElement, st: RoundState, quality: number): v
       const sx = px + (c.x - cxw) * s;
       const y0 = py + (c.y - cyw) * s * TILT - i * th * s;
       const rx = COIN_R * s, ry = COIN_R * s * TILT, hgt = th * s * 0.94;
-      const tone = coinTone(base, st.mode === 'single' ? 0 : o.si, i);
+      const tone = coinTone(T.coin, st.mode === 'single' ? 0 : o.si, i, T.sheenOn ? T.sheen : null);
       const g = ctx.createLinearGradient(sx - rx, 0, sx + rx, 0);
       g.addColorStop(0, tone.edge); g.addColorStop(0.28, tone.light); g.addColorStop(0.65, tone.dark); g.addColorStop(1, tone.edge);
       ctx.beginPath(); ctx.moveTo(sx - rx, y0 - hgt); ctx.lineTo(sx - rx, y0); ctx.ellipse(sx, y0, rx, ry, 0, Math.PI, 0, true); ctx.lineTo(sx + rx, y0 - hgt); ctx.ellipse(sx, y0 - hgt, rx, ry, 0, 0, Math.PI, false); ctx.closePath();
@@ -424,14 +424,48 @@ function afterSelect(): void { lastOv = null; S.table = Math.min(S.table, 9); bu
 // ---- the ring stage (hub, arenas, sub-arenas, tables) -------------------------------------------
 const jitter = (seat: number, salt: number): number => ((Math.imul(seat + salt * 977, 2654435761) >>> 0) % 1000) / 500 - 1; // -1..1, steady per seat
 
-function hubDraw(ctx: CanvasRenderingContext2D, cx: number, cy: number, hubR: number, line: string): void {
-  banded(ctx, cx, cy, hubR, T.hubFill, T.hub, Math.max(1.5, hubR * 0.04));
+/**
+ * The text inside the Collection Center Hub. Every line is measured and shrunk until it fits inside the circle
+ * (with a margin inside the outline), at any hub size. The small line is shortened, and dropped if it would be too tiny to read.
+ */
+function hubDraw(ctx: CanvasRenderingContext2D, cx: number, cy: number, hubR: number, lines: string[]): void {
+  const bw = Math.max(1.5, hubR * 0.04);
+  banded(ctx, cx, cy, hubR, T.hubFill, T.hub, bw);
   if (!S.text) return;
+  const cssPx = (ctx.canvas.clientWidth || ctx.canvas.width) / ctx.canvas.width; // css pixels per canvas pixel
+  const minFont = 6 / cssPx; // smallest readable text, in canvas pixels
+  const inner = hubR - bw - hubR * 0.06;
+  const FONT = (px: number, bold: boolean): string => `${bold ? 'bold ' : ''}${px}px ui-monospace,monospace`;
+  /** Largest font (up to `want`) at which `text`, centred at height y, stays inside the circle. 0 if it would be below the readable minimum. */
+  const fitFont = (text: string, y: number, want: number, bold: boolean): number => {
+    ctx.font = FONT(100, bold);
+    const per = ctx.measureText(text).width / 100; // width per pixel of font size
+    // the text box is about 1.2 font sizes tall; its corners farthest from the middle decide the chord
+    let f = want;
+    for (let i = 0; i < 24; i++) {
+      const farY = Math.abs(y) + f * 0.6;
+      const half = farY >= inner ? 0 : Math.sqrt(inner * inner - farY * farY);
+      if (per * f <= half * 2) return f >= minFont ? f : 0;
+      f *= 0.93;
+    }
+    return 0;
+  };
   ctx.fillStyle = T.hub; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.font = `bold ${Math.max(7, hubR * 0.2)}px ui-monospace,monospace`;
-  const lh = hubR * 0.24;
-  ctx.fillText('COLLECTION', cx, cy - lh * 1.2); ctx.fillText('CENTER', cx, cy - lh * 0.2); ctx.fillText('HUB', cx, cy + lh * 0.8);
-  if (line) { ctx.font = `${Math.max(6, hubR * 0.13)}px ui-monospace,monospace`; ctx.globalAlpha *= 0.85; ctx.fillText(line, cx, cy + lh * 1.75); ctx.globalAlpha /= 0.85; }
+  const title = ['COLLECTION', 'CENTER', 'HUB'];
+  const want = hubR * 0.2, lh = hubR * 0.24;
+  // the small line: try each wording (longest first), keep the first one that fits at a readable size
+  let small = '', smallF = 0;
+  const smallY = lh * 1.75;
+  for (const cand of lines) { const f = fitFont(cand, smallY, Math.max(minFont, hubR * 0.13), false); if (f > 0) { small = cand; smallF = f; break; } }
+  const shift = small ? 0 : lh * 0.3; // centred again when the small line is dropped
+  const ys = [-lh * 1.2 + shift, -lh * 0.2 + shift, lh * 0.8 + shift];
+  // all three words share one size so they look like one block; if they cannot be read at that size, no text is drawn
+  const sizes = title.map((t, i) => fitFont(t, ys[i]!, want, true));
+  if (sizes.some((f) => f <= 0)) return;
+  const tf = Math.min(...sizes);
+  ctx.font = FONT(tf, true);
+  title.forEach((t, i) => ctx.fillText(t, cx, cy + ys[i]!));
+  if (small) { ctx.font = FONT(smallF, false); ctx.globalAlpha *= 0.85; ctx.fillText(small, cx, cy + smallY); ctx.globalAlpha /= 0.85; }
 }
 /** The current hub layout (set at the start of every stage draw). Slot circles stay the size they always were; the petal behind each one grows as the hub shrinks. */
 let LAY: HubLayout | null = null;
@@ -521,7 +555,7 @@ function drawStage(rep: TablesReply | null): void {
   const { cx, cy, maxR } = stageGeom(w);
   const ov = S.level <= 1 ? currentOverview() : null;
   const quality = ov?.quality ?? rep?.quality ?? 0;
-  const base = coinBase(T, quality);
+  const base = coinBase(T);
   ctx.save();
   if (S.anim) {
     const p = Math.min(1, (performance.now() - S.anim.t0) / 260);
@@ -537,8 +571,8 @@ function drawStage(rep: TablesReply | null): void {
   const lay = hubLayout(cx, cy, maxR, stepHub(qualityFromVolume(hubVolume(ov))));
   LAY = lay;
   const ring = lay.ring;
-  let hubLine = '';
-  if (S.text && ov && S.level <= 1) { let playing = 0; for (let i = 0; i < 1000; i++) if (cellOf(ov, i).phase === 'play') playing++; hubLine = `${playing} playing \u00b7 next in ${Math.max(0, Math.ceil((S.slotMs - (S.vt % S.slotMs)) / 1000))}s`; }
+  let hubLines: string[] = [];
+  if (S.text && ov && S.level <= 1) { let playing = 0; for (let i = 0; i < 1000; i++) if (cellOf(ov, i).phase === 'play') playing++; hubLines = [`${playing} playing \u00b7 next in ${Math.max(0, Math.ceil((S.slotMs - (S.vt % S.slotMs)) / 1000))}s`, `${playing} playing`]; }
   const labelCol = contrastOn(S.level === 0 ? T.arena : T.subarena);
   const sec = S.vt - (ov?.slotStartMs ?? 0);
   void sec;
@@ -633,19 +667,17 @@ function drawStage(rep: TablesReply | null): void {
       const dev = p.r / Math.min(2, window.devicePixelRatio || 1);
       const tableLabel = contrastOn(T.table);
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillStyle = tableLabel;
-      if (!S.text) { disc(ctx, p.x, p.y + p.r * 0.9, Math.max(2, p.r * 0.06)); ctx.fillStyle = T.bot; ctx.fill(); return; }
+      if (!S.text) return;
       if (dev >= 40) {
-        const nf = p.r * 0.14;
-        ctx.font = `${nf}px ui-monospace,monospace`;
-        const nm = plan.botName; const tw = ctx.measureText(nm).width;
-        ctx.fillText(nm, p.x + p.r * 0.05, p.y + p.r * 0.6);
-        disc(ctx, p.x - tw / 2 - p.r * 0.06, p.y + p.r * 0.6, Math.max(2, p.r * 0.045)); ctx.fillStyle = T.bot; ctx.fill(); ctx.fillStyle = tableLabel;
-      } else { disc(ctx, p.x, p.y + p.r * 0.62, Math.max(2, p.r * 0.07)); ctx.fillStyle = T.bot; ctx.fill(); ctx.fillStyle = tableLabel; }
+        ctx.font = `${p.r * 0.14}px ui-monospace,monospace`;
+        ctx.fillText(plan.botName, p.x, p.y + p.r * 0.6);
+      }
       ctx.font = `bold ${p.r * 0.2}px ui-monospace,monospace`;
       ctx.fillText(scoreText(plan, st, pr.waiting), p.x, p.y + p.r * 0.82);
     });
   }
-  hubDraw(ctx, cx, cy, lay.hubR, hubLine);
+  document.documentElement.dataset.hubR = lay.hubR.toFixed(1);
+  hubDraw(ctx, cx, cy, lay.hubR, hubLines);
   ctx.restore();
   if (S.text && rep == null && S.level >= 2) { ctx.fillStyle = T.hub; ctx.textAlign = 'center'; ctx.font = `${w / 30}px ui-monospace,monospace`; ctx.fillText('loading...', cx, cy + w * 0.2); }
   void hoverText;
@@ -701,7 +733,7 @@ function updateClose(rep: TablesReply | null): void {
   const key = `${plan.roundId}|${sstat.text}|${scoreText(plan, st, waiting)}|${S.table}`;
   if (key !== closeKey) {
     closeKey = key;
-    $('closeHead').innerHTML = `<button id="prevT" title="previous table">&#8592;</button><button id="nextT" title="next table">&#8594;</button><span class="dot"></span><span class="nm">${esc(plan.botName)}</span><span class="badge ${sstat.cls}">${sstat.text}</span><span class="score">${scoreText(plan, st, waiting)}</span><span class="sp"></span><span style="color:var(--dim)">table ${S.table} of sub-arena ${S.sub}, arena ${S.arena}</span>`;
+    $('closeHead').innerHTML = `<button id="prevT" title="previous table">&#8592;</button><button id="nextT" title="next table">&#8594;</button><span class="nm">${esc(plan.botName)}</span><span class="badge ${sstat.cls}">${sstat.text}</span><span class="score">${scoreText(plan, st, waiting)}</span><span class="sp"></span><span style="color:var(--dim)">table ${S.table} of sub-arena ${S.sub}, arena ${S.arena}</span>`;
     $('prevT').onclick = () => { S.table = (S.table + 9) % 10; closeKey = ''; rightKey = ''; buildCrumb(); };
     $('nextT').onclick = () => { S.table = (S.table + 1) % 10; closeKey = ''; rightKey = ''; buildCrumb(); };
   }
@@ -738,12 +770,12 @@ function renderFocusTable(plan: Plan, st: RoundState, k: number, waiting: boolea
   }
   if (withCanvases) { drawOverhead(root.querySelector('.ov') as HTMLCanvasElement, st, 1, plan.quality); drawStanding(root.querySelector('.sd') as HTMLCanvasElement, st, plan.quality); }
   const sstat = status(plan, st, waiting);
-  $('fHead').innerHTML = `<div class="kv"><b style="font-size:16px"><span class="dot"></span> ${esc(plan.botName)}</b><span class="badge ${sstat.cls}">${sstat.text}</span></div><div class="kv"><span>table</span><span>${plan.mode} &middot; seat ${plan.seat.index} (A${plan.seat.arena} S${plan.seat.subArena} T${plan.seat.table})</span></div>`;
+  $('fHead').innerHTML = `<div class="kv"><b style="font-size:16px">${esc(plan.botName)}</b><span class="badge ${sstat.cls}">${sstat.text}</span></div><div class="kv"><span>table</span><span>${plan.mode} &middot; seat ${plan.seat.index} (A${plan.seat.arena} S${plan.seat.subArena} T${plan.seat.table})</span></div>`;
   $('fFacts').innerHTML = facts(plan, st, k, waiting);
 }
 function legendHtml(): string {
   const chip = (style: string): string => `<span style="display:inline-block;width:18px;height:18px;border-radius:50%;flex:none;${style}"></span>`;
-  const b = coinBase(T, 1);
+  const b = coinBase(T);
   return `<div class="legend">
     <div>${chip(`background:${T.table};border:2px solid ${T.ring}`)} waiting for its bot to start</div>
     <div>${chip(`background:${b}`)} playing: a bigger disc is a taller stack</div>
@@ -754,7 +786,6 @@ function legendHtml(): string {
     <div>${chip(`background:${T.table};border:2px solid ${T.ring}`)} a table</div>
     <div>${chip(`background:${T.subarena};border:3px dotted ${b}`)} ring of 10 arcs, one per table. Faint = waiting. Coin colour = placing coins (thicker arc = taller stack). Cashed colour = cashed out. Fell colour = fell</div>
     <div>${chip(`background:${T.subarena};border:2px solid ${T.hub};box-shadow:0 0 6px ${T.hub}`)} bright flash: a coin just landed</div>
-    <div>${chip(`background:${T.bot};width:10px;height:10px;margin:0 4px`)} a bot disc</div>
   </div>`;
 }
 function renderRight(rep: TablesReply | null): void {
@@ -768,16 +799,16 @@ function renderRight(rep: TablesReply | null): void {
   }
   const now = Math.floor(S.vt / 1500);
   if (S.level === 2 && rep) {
-    const key = `L2|${rep.slot}|${S.arena}|${S.sub}|${now}|${T.coin}`;
+    const key = `L2|${rep.slot}|${S.arena}|${S.sub}|${now}|${T.coin}|${T.sheenOn}|${T.sheen}`;
     if (key === rightKey) return;
     rightKey = key; lastFocusKey = '';
     root.innerHTML = `<h3>SUB-ARENA ${S.arena}.${S.sub}</h3><ul class="tlist">${rep.tables.map((plan, i) => {
       const { k, waiting } = progress(rep, plan); const st = stateAt(plan, k); const s = status(plan, st, waiting);
-      return `<li data-t="${i}"><span class="dot"></span><span class="nm">${esc(plan.botName)}</span><span class="badge ${s.cls}">${s.text}</span><span class="score" style="font-size:13px">${scoreText(plan, st, waiting)}</span></li>`;
+      return `<li data-t="${i}"><span class="nm">${esc(plan.botName)}</span><span class="badge ${s.cls}">${s.text}</span><span class="score" style="font-size:13px">${scoreText(plan, st, waiting)}</span></li>`;
     }).join('')}</ul><h3 style="margin-top:14px">HOW TO READ THE COLOURS</h3>${legendHtml()}`;
     return;
   }
-  const key = `L${S.level}|${S.arena}|${T.coin}|${T.fell}|${T.platform}|${T.arena}|${T.subarena}|${T.table}|${T.cashed}|${T.bot}|${T.ring}`;
+  const key = `L${S.level}|${S.arena}|${T.coin}|${T.fell}|${T.platform}|${T.arena}|${T.subarena}|${T.table}|${T.cashed}|${T.ring}|${T.sheenOn}|${T.sheen}`;
   if (key === rightKey) return;
   rightKey = key; lastFocusKey = '';
   root.innerHTML = `<h3>${S.level === 0 ? 'ARENA OF ARENAS' : 'ARENA ' + S.arena}</h3>
@@ -854,7 +885,7 @@ function renderSummary(): void {
     <div style="color:var(--dim);font-size:11px">Coin quality ${Math.round(s.quality * 100)}%: ${s.quality < 0.25 ? 'worst coins, wobbly and lopsided' : s.quality < 0.75 ? 'middling coins' : 'near perfect coins'}. Volume is locked when each round starts.</div>
     <div style="color:var(--dim);font-size:11px;margin-top:6px">Counts include only minutes when someone was watching.${s.updating ? ' Updating...' : ''}</div>`;
   const lb = $('lb');
-  lb.innerHTML = s.board.map((e, i) => `<li data-seat="${e.seat}"><span class="n">${i + 1}</span><span class="dot"></span><span class="nm">${esc(e.botName)}</span><span class="tag">HOUSE</span><span class="sc">${e.score}</span></li>`).join('') || '<li style="color:var(--dim)">counting the first minute...</li>';
+  lb.innerHTML = s.board.map((e, i) => `<li data-seat="${e.seat}"><span class="n">${i + 1}</span><span class="nm">${esc(e.botName)}</span><span class="tag">HOUSE</span><span class="sc">${e.score}</span></li>`).join('') || '<li style="color:var(--dim)">counting the first minute...</li>';
   lb.querySelectorAll('li[data-seat]').forEach((li) => li.addEventListener('click', () => goSeat(Number((li as HTMLElement).dataset.seat))));
 }
 function goSeat(seat: number): void {
@@ -872,13 +903,12 @@ const LEVEL_ROWS: { key: ThemeColorKey; label: string; hint: string }[] = [
 const COLOR_ROWS: { key: ThemeColorKey; label: string; hint: string }[] = [
   { key: 'bg', label: 'Background', hint: 'behind everything' },
   { key: 'text', label: 'Text', hint: 'words and numbers' },
-  { key: 'coin', label: 'Coins', hint: 'the coin colour (best quality when blending)' },
-  { key: 'coin2', label: 'Coins, worst quality', hint: 'used when colouring by quality' },
+  { key: 'coin', label: 'Coin color', hint: 'the solid colour of every coin' },
+  { key: 'sheen', label: 'Sheen', hint: 'laid over each coin at 25% when Add sheen is on' },
   { key: 'platform', label: 'Platform (big circle)', hint: 'the big circle behind the 10 arenas' },
   { key: 'ring', label: 'Rings and outlines', hint: 'circle edges' },
   { key: 'hub', label: 'Hub text and highlights', hint: 'hub words, selection' },
   { key: 'hubFill', label: 'Hub fill', hint: 'the Collection Center Hub' },
-  { key: 'bot', label: 'Bot discs', hint: 'the small disc by each bot name' },
   { key: 'fell', label: 'Fell marks', hint: 'a stack that fell' },
   { key: 'cashed', label: 'Cashed out marks', hint: 'a round that was cashed out' },
 ];
@@ -888,7 +918,7 @@ function buildColors(): void {
     <div class="sec">PRESETS</div><div id="presets"></div>
     <div class="sec">LEVELS</div><div id="lrows"></div>
     <div class="sec">COINS</div>
-    <div class="crow"><label for="cq">Colour coins by quality<small>blend from worst to best coin colour</small></label><input type="checkbox" id="cq"></div>
+    <div class="crow"><label for="shOn">Add sheen<small>lay the Sheen colour over each coin at 25%</small></label><input type="checkbox" id="shOn"></div>
     <div class="sec">COLOURS</div><div id="crows"></div>
     <div class="btns"><button id="cShare">COPY SHARE LINK</button><button id="cReset">RESET</button></div>
     <div id="shareMsg"></div>`;
@@ -915,7 +945,7 @@ function buildColors(): void {
   };
   LEVEL_ROWS.forEach((r) => addRow($('lrows'), r));
   COLOR_ROWS.forEach((r) => addRow($('crows'), r));
-  ($('cq') as HTMLInputElement).onchange = (e) => setTheme({ coinByQuality: (e.target as HTMLInputElement).checked });
+  ($('shOn') as HTMLInputElement).onchange = (e) => setTheme({ sheenOn: (e.target as HTMLInputElement).checked });
   $('cReset').onclick = () => { setTheme(DEFAULT_THEME); $('shareMsg').textContent = 'Back to black, white and red.'; };
   $('cClose').onclick = () => toggleColors(false);
   $('cShare').onclick = async () => {
@@ -933,8 +963,8 @@ function syncColorInputs(): void {
     if (p && p.value !== T[k]) p.value = T[k];
     if (t && document.activeElement !== t) t.value = T[k];
   }
-  const cq = box.querySelector('#cq') as HTMLInputElement | null; if (cq) cq.checked = T.coinByQuality;
-  const row2 = box.querySelector('[data-key="coin2"]') as HTMLElement | null; if (row2) row2.style.opacity = T.coinByQuality ? '1' : '0.45';
+  const shOn = box.querySelector('#shOn') as HTMLInputElement | null; if (shOn) shOn.checked = T.sheenOn;
+  const row2 = box.querySelector('[data-key="sheen"]') as HTMLElement | null; if (row2) row2.style.opacity = T.sheenOn ? '1' : '0.45';
   box.querySelectorAll('#presets button').forEach((b) => { const p = PRESETS.find((x) => x.id === (b as HTMLElement).dataset.preset); (b as HTMLElement).className = p && sameTheme(p.theme, T) ? 'on' : ''; });
 }
 function toggleColors(show?: boolean): void {
